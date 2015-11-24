@@ -6,6 +6,7 @@
 #  1. expose dimensionality template param
 #  2. need to expose iterators to sp_map_t?
 #  3. inplace operators (__iadd__ etc)
+#  4. check arg not None
 #
 #  Minor quibbles:
 #  1. access to elements of fixed_capacity: operator[] or ELEM macro
@@ -31,6 +32,7 @@ cdef extern from "sp_map.h" namespace "sparray":
 
         size_t ndim() const
         index_type shape() const
+        index_type get_min_shape() const
 
         T fill_value() const
         void set_fill_value(T value)

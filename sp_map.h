@@ -29,7 +29,7 @@ struct map_array_t
     index_type get_min_shape() const;
 
     T fill_value() const { return fill_value_; }
-    void set_fill_value(const T& value) {fill_value_ = value;}
+    void set_fill_value(const T& value) { fill_value_ = value; }
 
     // access nonzero elements
     size_t count_nonzero() const { return data_.size(); }
@@ -125,6 +125,29 @@ map_array_t<T, I, num_dim>::inplace_unary_op(T (*fptr)(T x, T a, T b), T a, T b)
     fill_value_ = (*fptr)(fill_value_, a, b);
 }
 
+
+template<typename T, typename I, size_t num_dim>
+inline typename map_array_t<T, I, num_dim>::index_type
+map_array_t<T, I, num_dim>::get_min_shape() const
+{
+    index_type sh;
+    for (size_t j = 0; j < num_dim; ++j){ sh[j] = 0; }
+
+    iter_nonzero_type it = this->begin_nonzero();
+    for (; it != this->end_nonzero(); ++it){
+        for (size_t j=0; j < num_dim; ++j){ 
+            if (it->second[j] >= sh[j]){
+                sh[j] = it->second[j] + 1;
+            }
+        }
+    }
+    return sh;
+}
+
+// TODO: 1. binary ops
+//        2. boolean ops a la numpy: return map_array_t of booleans (allocation!)
+//        3. todense
+//        4. slicing
 
 } // namespace sparray
 
