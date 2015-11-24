@@ -1,0 +1,7 @@
+##### build related files
+scrtch/
+build/
+*so
+a.out
+#### cython output files
+*cpp
