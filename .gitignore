@@ -1,6 +1,6 @@
 ##### build related files
 scrtch/
-build/
+build/*
 *so
 a.out
 #### cython output files
