@@ -40,10 +40,13 @@ struct map_array_t
     T get_one(const index_type& idx) const;
     void set_one(const index_type& idx, const T& value);
 
-    // FIXME: return error codes / raise exceptions. Below and elsewhere. 
+    // indexing helpers
+    single_index_type _flat_index(const index_type& index) const;
 
-    // convert to a dense representation (C order). Caller's responsible for allocations.
-    void todense(T* dest, const int len) const;
+    // FIXME: return error codes / raise exceptions. Below and elsewhere. 
+    // convert to a dense representation (C order). Caller's responsible for
+    // allocating memory.
+    void todense(void* dest, const single_index_type len) const;
 
     // elementwise operations
     void inplace_unary_op(T (*fptr)(T x, T a, T b), T a, T b);  // x <- f(x, a, b)
@@ -106,7 +109,7 @@ map_array_t<T, I, num_dim>::set_one(const map_array_t::index_type& idx, const T&
 
     // update the shape if needed
     for(size_t j=0; j < num_dim; ++j){
-        if(idx[j] >= shape_[j]){ 
+        if(idx[j] >= shape_[j]){
             shape_[j] = idx[j] + 1;
         }
     }
@@ -144,10 +147,44 @@ map_array_t<T, I, num_dim>::get_min_shape() const
     return sh;
 }
 
+
+/* Flat index to an array. C order, 2D only.
+ */
+template<typename T, typename I, size_t num_dim>
+inline single_index_type
+map_array_t<T, I, num_dim>::_flat_index(const typename map_array_t<T, I, num_dim>::index_type& index) const
+{
+    assert(num_dim == 2);
+    single_index_type stride = shape_[1];
+    return index[0]*stride + index[1];
+}
+
+
+template<typename T, typename I, size_t num_dim>
+inline void
+map_array_t<T, I, num_dim>::todense(void* dest, const single_index_type num_elem) const
+{
+    if (num_elem < 0){ throw std::runtime_error("num_elem < 0"); }
+    if (num_elem == 0){ return; }
+
+    // fill the background
+    T *_dest = static_cast<T*>(dest);
+    std::fill(_dest, _dest + num_elem, fill_value_);
+
+    // fill nonzero elements (FIXME)
+    map_array_t<T, I, num_dim>::iter_nonzero_type it = begin_nonzero();
+    for(; it != end_nonzero(); ++it){
+        single_index_type idx = _flat_index(it->first);
+        _dest[idx] = it->second;
+    }
+}
+
+
 // TODO: 1. binary ops
 //        2. boolean ops a la numpy: return map_array_t of booleans (allocation!)
 //        3. todense
 //        4. slicing
+//        5. special-case zero fill_value (memset, also matmul?)
 
 } // namespace sparray
 

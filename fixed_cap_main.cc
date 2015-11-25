@@ -32,10 +32,10 @@ int main(){
 
     // copy ctor & copy assignment op
 
-    fixed_capacity<int, 2> vvv(v);
+    fixed_capacity<single_index_type, 2> vvv(v);
     std::cout<< "copy ctor(v): "<< vvv << "\n";
 
-    fixed_capacity<int, 2> v4 = v;
+    fixed_capacity<single_index_type, 2> v4 = v;
     std::cout<< "op=(v): "<< vvv << "\n";
 
 
@@ -43,11 +43,11 @@ int main(){
 
     // C array ctor: intentionally left out. XXX: restore?
 
-    int a[2] = {3, 4};
-    fixed_capacity<int, 2> v5(a);
+    single_index_type a[2] = {3, 4};
+    fixed_capacity<single_index_type, 2> v5(a);
     std::cout<< "c arr ctor: "<< v5 << "\n";
 
-    fixed_capacity<int, 2> v6;
+    fixed_capacity<single_index_type, 2> v6;
     memcpy(FC_ELEMS(v6), a, sizeof(a));
 
     std::cout << "w/ memcpy:" <<  v6 << "\n";

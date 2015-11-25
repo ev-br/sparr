@@ -1,4 +1,5 @@
 #include<iostream>
+#include<vector>
 #include"sp_map.h"
 #include"fixed_cap.h"
 #include"elementwise_ops.h"
@@ -99,6 +100,14 @@ int main(){
         }
         std::cout << "\n*****************\n";
         std::cout << ma << "\n";
+
+        std::vector<double> v(m*n);
+        ma.todense(&v[0], -1);
+        for(size_t j=0; j<v.size(); ++j){
+            std::cout << v[j] << ", ";
+        }
+        std::cout << "]\n";
+
     }
 
 }

@@ -12,16 +12,20 @@
 #  1. access to elements of fixed_capacity: operator[] or ELEM macro
 #  2. how to keep typedefs in sync between Cy and C++
 
+cimport numpy as cnp
+from numpy cimport PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE, npy_intp, NPY_DOUBLE
+
 
 cdef extern from "fixed_cap.h" namespace "sparray":
     cdef cppclass fixed_capacity[I]:
         fixed_capacity() except +
         fixed_capacity(const I*) except +
         I& operator[](size_t j) except +
+        long int[] elem_
 
 
-ctypedef int single_index_type            # this needs ot be in sync w/C++
-ctypedef fixed_capacity[int] index_type   # XXX: can't do fixed_capacity[single_index_type]
+ctypedef long int single_index_type            # this needs ot be in sync w/C++
+ctypedef fixed_capacity[long int] index_type   # XXX: can't do fixed_capacity[single_index_type]
 
 
 cdef extern from "sp_map.h" namespace "sparray":
@@ -41,6 +45,8 @@ cdef extern from "sp_map.h" namespace "sparray":
 
         T get_one(const index_type& idx) const 
         void set_one(const index_type& idx, const T& value)
+
+        void todense(void* dest, const single_index_type num_elem) const
 
         void inplace_unary_op(T (*fptr)(T, T, T), T, T)
 
@@ -117,3 +123,14 @@ cdef class MapArray:
         newobj = MapArray()
         newobj.thisptr.copy_from_other(self.thisptr[0])
         return newobj.__iadd__(other)
+
+    def todense(self):
+        cdef int nd = <int>self.thisptr.ndim()
+        cdef cnp.ndarray a = PyArray_SimpleNew(self.thisptr.ndim(),
+                                               <npy_intp*>self.thisptr.shape().elem_,
+                                               NPY_DOUBLE)
+        self.thisptr.todense(PyArray_DATA(a), PyArray_SIZE(a))
+        return a
+
+
+cnp.import_array()

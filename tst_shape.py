@@ -44,6 +44,35 @@ print "xxx: ", xxx.ndim, xxx.shape, xxx.count_nonzero(), xxx[3, 4]
 print "ma: ", ma.ndim, ma.shape, ma.count_nonzero(), ma[3, 4]
 print "ids: ma, xxx", id(ma), id(xxx)
 
+print "\n\n ******************* todense"
+
+value = 0.
+ma = MapArray()
+#for i in (0, 2, 1):
+#    for j in (0, 3, 4, 2, 1):
+for i in (0, 1, 2):
+    for j in (0, 1, 2, 3, 4):
+        ma[i, j] = value
+       # print(i, j, ' : ', value)
+        value += 1
+
+
+print ma.todense()
+
+
+print "\n\n ******************* todense 2"
+
+ma = MapArray()
+ma[1, 1] = 1.
+print ma.todense(), '\n'
+
+ma[2, 3] = 2.
+print ma.todense(), '\n'
+
+ma[3, 4] = 3.
+ma[0, 4] = -8
+print ma.todense()
+
 
 ## multiply
 #other = ma * 3

@@ -6,7 +6,7 @@
 
 namespace sparray {
 
-typedef int single_index_type;  // FIXME: npy_intp, likely Py_ssize_t
+typedef long int single_index_type;  // FIXME: npy_intp, likely Py_ssize_t
 
 
 template<typename I=single_index_type, size_t num_dim=2>
