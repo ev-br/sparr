@@ -1,3 +1,4 @@
+from __future__ import division, print_function, absolute_import
 import operator
 
 import numpy as np
@@ -88,18 +89,18 @@ class TestArithmetics(TestCase):
     rhs[2, 4] = 3.
     rhs.fill_value = -8
 
-    iop = operator.iadd
+    iop = operator.iadd       # x = iop(x, y) is x += y
     op = operator.add
 
-    def test_inplace_add_scalar(self):
+    def test_inplace_iop_scalar(self):
         ma1 = self.ma.copy()
-        self.iop(ma1, 4)      # IOW, ma1 += 4
+        ma1 = self.iop(ma1, 4)      # IOW, ma1 += 4
 
         assert_equal(ma1.shape, self.ma.shape)
         assert_allclose(ma1.todense(),
                         self.op(self.ma.todense(), 4.), atol=1e-15)
 
-    def test_inplace_add_unsupported_type_obj(self):
+    def test_inplace_iop_unsupported_type_obj(self):
         ma1 = self.ma.copy()
         with assert_raises(TypeError):
             self.iop(ma1, 'lalala')
@@ -108,19 +109,20 @@ class TestArithmetics(TestCase):
             self.iop(ma1, None)
 
         with assert_raises(TypeError):
-            self.iop(ma1, self.rhs.todense())
+            ress = self.iop(ma1, [1, 2, 3, 4])
 
-    def test_inplace_add_sparse(self):
+    def test_inplace_iop_sparse(self):
         ma1 = self.ma.copy()
         rhs = self.rhs.copy()
-        self.iop(ma1, rhs)
+        ma1 = self.iop(ma1, rhs)
 
         # the LHS is operated on, and RHS is intact
+        assert_(isinstance(ma1, MapArray))
         assert_allclose(ma1.todense(),
                         self.ma.todense() + self.rhs.todense(), atol=1e-15)
         assert_allclose(rhs.todense(), self.rhs.todense(), atol=1e-15)
 
-    def test_inplace_add_wrong_shape(self):
+    def test_inplace_iop_wrong_shape(self):
         # incompatible shapes should raise ValueErrors
         ma1 = self.ma.copy()
         rhs = self.rhs.copy()
@@ -128,6 +130,75 @@ class TestArithmetics(TestCase):
         with assert_raises(ValueError):
             self.iop(ma1, rhs)
 
+    def test_sparse_op_sparse_wrong_shape(self):
+        ma1 = self.ma.copy()
+        rhs = self.rhs.copy()
+        rhs[8, 9] = -101
+        with assert_raises(ValueError):
+            self.op(ma1, rhs)
+
+    def test_sparse_op_sparse(self):
+        ma1 = self.ma.copy()
+        rhs = self.rhs.copy()
+
+        res = self.op(ma1, rhs)
+        assert_(isinstance(res, MapArray))
+        assert_allclose(res.todense(),
+                        self.op(ma1.todense(), rhs.todense()), atol=1e-15)
+
+    def test_sparse_op_scalar(self):
+        ma1 = self.ma.copy()
+
+        res = self.op(ma1, 4)
+        assert_(isinstance(res, MapArray))
+        assert_allclose(res.todense(),
+                        self.op(ma1.todense(), 4), atol=1e-15)
+
+    def test_scalar_op_sparse(self):
+        ma1 = self.ma.copy()
+
+        res = self.op(4, ma1)
+        assert_(isinstance(res, MapArray))
+        assert_allclose(res.todense(),
+                        self.op(4, ma1.todense()), atol=1e-15)
+
+    def test_sparse_op_wrong_scalar(self):
+        ma1 = self.ma.copy()
+        with assert_raises(TypeError):
+            self.op(ma1, 'lalala')
+        with assert_raises(TypeError):
+            self.op('lalala', ma1)
+
+        with assert_raises(TypeError):
+            self.op(ma1, None)
+        with assert_raises(TypeError):
+            self.op(None, ma1)
+
+        with assert_raises(TypeError):
+            self.iop(ma1, [1, 2, 3, 4])
+        with assert_raises(TypeError):
+            self.iop([1, 2, 3, 4], ma1)
+
+    def test_sparse_dense_interop(self):
+        # dense + sparse densifies for scipy.sparse matrices.
+        # So we try to be consistent here for sparse + dense or sparse += dense
+        ma1 = self.ma.copy()
+        dense = self.rhs.todense()
+
+        for res in (self.op(ma1, dense),
+                    self.op(dense, ma1)):
+            assert_(isinstance(res, np.ndarray))
+            assert_allclose(res,
+                            self.op(ma1.todense(), dense), atol=1e-15)
+
+        # also check the in-place version
+        ma1 = self.ma.copy()
+        dense = self.rhs.todense()
+
+        ma1 = self.iop(ma1, dense)
+        assert_(isinstance(ma1, np.ndarray))
+        assert_allclose(ma1,
+                        self.op(self.ma.todense(), dense), atol=1e-15)
 
 
 if __name__ == "__main__":

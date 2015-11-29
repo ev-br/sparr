@@ -13,6 +13,7 @@
 #  1. access to elements of fixed_capacity: operator[] or ELEM macro
 #  2. how to keep typedefs in sync between Cy and C++
 
+import numpy as np
 cimport numpy as cnp
 from numpy cimport PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE, npy_intp, NPY_DOUBLE
 
@@ -63,6 +64,8 @@ cdef extern from "elementwise_ops.h" namespace "sparray":
 
 cdef class MapArray:
     cdef map_array_t[double] *thisptr
+
+    __array_priority__ = 10.1     # equal to that of sparse matrices
 
     def __cinit__(self):
         self.thisptr = new map_array_t[double]()
@@ -116,27 +119,47 @@ cdef class MapArray:
 
     # TODO: 
     #        2. type casting 
-    #        3. add more arithm ops
+    #        3. add more arithm ops: sub, mul, div, l/r shifts, mod etc
+    #        4. matmul and inplace axpy? 
 
-    def __iadd__(MapArray self, other):
+    def __iadd__(self, other):
+        cdef double d_other
         if isinstance(other, MapArray):
             return self._iadd_maparr(other)
+        elif isinstance(other, np.ndarray):
+            # hand over to __add__ for densification
+            return NotImplemented
         else:
-            # it must be a scalar (FIXME)
-            self.thisptr.inplace_unary_op(linear_unary_op[double], 1., other)
-            return self
+            # it must be a scalar
+            try:
+                d_other = <double?>(other)
+                self.thisptr.inplace_unary_op(linear_unary_op[double], 1., d_other)
+                return self
+            except TypeError:
+                # strings, lists and other animals
+                return NotImplemented
 
+    # XXX: unify. Either both cast (<MapArray>self).thisptr,  or both dispatch onto a cdef function.
     cdef _iadd_maparr(MapArray self, MapArray other):
-        cdef map_array_t[double] *other_ptr = other.thisptr    
         self.thisptr.inplace_binary_op(linear_binary_op[double],
-                                       other_ptr[0], 1., 1.)
+                                       other.thisptr[0], 1., 1.)
         return self
 
-    def __add__(MapArray self, other):
-        # TODO: type testing, needed?
-        newobj = MapArray()
-        newobj.thisptr.copy_from_other(self.thisptr[0])
-        return newobj.__iadd__(other)
+    def __add__(self, other):
+        if isinstance(self, MapArray):
+            if isinstance(other, np.ndarray):
+                # Densify return dense result
+                return self.todense() + other
+            else:
+                newobj = MapArray()
+                newobj.thisptr.copy_from_other((<MapArray>self).thisptr[0])  # XXX: copy_from_other(ptr)
+                return newobj.__iadd__(other)
+        elif isinstance(other, MapArray):
+            return other.__add__(self)
+        else:
+            # how come?
+            raise RuntimeError("__add__ : never be here ", self, other)
+
 
     def __isub__(MapArray self, double other):
         # subtract a scalar
