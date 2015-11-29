@@ -102,11 +102,34 @@ int main(){
         std::cout << ma << "\n";
 
         std::vector<double> v(m*n);
-        ma.todense(&v[0], -1);
+        ma.todense(&v[0], v.size());
         for(size_t j=0; j<v.size(); ++j){
             std::cout << v[j] << ", ";
         }
         std::cout << "]\n";
+
+    }
+
+
+    // in-place elementwise binary operations
+    {
+        std::cout <<"\n\n****** inplace binops\n";
+        map_array_t<double> ma;
+        single_index_type a[NDIM] = {3, 4};
+        ma.set_one(a, 101.);
+
+        map_array_t<double> rhs(ma);
+
+        a[0] -= 1;
+        rhs.set_one(a, -2);
+
+        std::cout << "lhs, rhs: \n";
+        std::cout << ma << "\n";
+        std::cout << rhs << "\n";
+
+        ma.inplace_binary_op(linear_binary_op<double>, rhs, 1., 1.);
+
+        std::cout << "__iadd__: \n" << ma << "\n";
 
     }
 

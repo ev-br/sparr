@@ -7,6 +7,7 @@
 #  2. need to expose iterators to sp_map_t?
 #  3. inplace operators (__iadd__ etc)
 #  4. check arg not None
+#  5. translate C++ exceptions
 #
 #  Minor quibbles:
 #  1. access to elements of fixed_capacity: operator[] or ELEM macro
@@ -43,17 +44,21 @@ cdef extern from "sp_map.h" namespace "sparray":
 
         size_t count_nonzero() const
 
+        # single element accessors
         T get_one(const index_type& idx) const 
         void set_one(const index_type& idx, const T& value)
 
         void todense(void* dest, const single_index_type num_elem) const
 
-        void inplace_unary_op(T (*fptr)(T, T, T), T, T)
+        void inplace_unary_op(T (*fptr)(T x, T a, T b), T a, T b)  # x <- f(x, a, b)
+        void inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
+                               const map_array_t[T]& other, T a, T b) except +  # x <- f(x, y, a, b)
 
 
 cdef extern from "elementwise_ops.h" namespace "sparray":
     T linear_unary_op[T](T, T, T)
     T power_unary_op[T](T, T, T)
+    T linear_binary_op[T](T, T, T, T)
 
 
 cdef class MapArray:
@@ -104,18 +109,27 @@ cdef class MapArray:
 
     ###### Arithmetics #############
 
-    # TODO: 1. implement/expose binary ops
+    def copy(self):
+        newobj = MapArray()
+        newobj.thisptr.copy_from_other(self.thisptr[0])
+        return newobj
+
+    # TODO: 
     #        2. type casting 
     #        3. add more arithm ops
 
-    def __iadd__(MapArray self, double other):
-        # add a scalar
-        self.thisptr.inplace_unary_op(linear_unary_op[double], 1., other)
-        return self
-        
-    def __isub__(MapArray self, double other):
-        # subtract a scalar
-        self.thisptr.inplace_unary_op(linear_unary_op[double], 1., -other)
+    def __iadd__(MapArray self, other):
+        if isinstance(other, MapArray):
+            return self._iadd_maparr(other)
+        else:
+            # it must be a scalar (FIXME)
+            self.thisptr.inplace_unary_op(linear_unary_op[double], 1., other)
+            return self
+
+    cdef _iadd_maparr(MapArray self, MapArray other):
+        cdef map_array_t[double] *other_ptr = other.thisptr    
+        self.thisptr.inplace_binary_op(linear_binary_op[double],
+                                       other_ptr[0], 1., 1.)
         return self
 
     def __add__(MapArray self, other):
@@ -123,6 +137,11 @@ cdef class MapArray:
         newobj = MapArray()
         newobj.thisptr.copy_from_other(self.thisptr[0])
         return newobj.__iadd__(other)
+
+    def __isub__(MapArray self, double other):
+        # subtract a scalar
+        self.thisptr.inplace_unary_op(linear_unary_op[double], 1., -other)
+        return self
 
     def todense(self):
         cdef int nd = <int>self.thisptr.ndim()

@@ -1,6 +1,7 @@
 #ifndef SP_MAP_H
 #define SP_MAP_H
 #include<map>
+#include<stdexcept>
 #include"fixed_cap.h"
 
 
@@ -50,6 +51,10 @@ struct map_array_t
 
     // elementwise operations
     void inplace_unary_op(T (*fptr)(T x, T a, T b), T a, T b);  // x <- f(x, a, b)
+    void inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
+                           map_array_t<T, I, num_dim>& other,
+                           T a,
+                           T b); // x <- f(x, y, a, b), e.g. x <- a*x + b*y
 
     private:
         map_type data_;
@@ -130,6 +135,46 @@ map_array_t<T, I, num_dim>::inplace_unary_op(T (*fptr)(T x, T a, T b), T a, T b)
 
 
 template<typename T, typename I, size_t num_dim>
+inline void
+map_array_t<T, I, num_dim>::inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
+                                              map_array_t<T, I, num_dim>& other,
+                                              T a,
+                                              T b)
+{
+    // check that the dimensions are compatible
+    for(size_t j=0; j<num_dim; ++j){
+        if(shape_[j] != other.shape()[j]){
+            // TODO: probably want to output the dimensions here
+            throw std::invalid_argument("Binop: incompatible dimensions.");
+        }
+    }
+
+    // run other the nonzero elements of *this. This is O(n1 * log(n2))
+    typename map_type::iterator it = data_.begin();
+    for(; it != data_.end(); ++it){
+        index_type idx = it->first;
+        T y = other.get_one(idx);           // NB: may equal other.fill_value
+        it->second = (*fptr)(it->second, y, a, b);
+    }
+
+    // run over the nonzero elements of *other; those which are present in both
+    // *this and *other have been taken care of already. Insert new ones
+    // into *this. This loop's complexity is O(n2 * log(n1))
+    iter_nonzero_type it_other = other.begin_nonzero();
+    for(; it_other != other.end_nonzero(); ++it_other){
+        index_type idx = it_other->first;
+        it = data_.find(idx);
+        if (it == data_.end()){
+            data_[idx] = (*fptr)(fill_value_, it_other->second, a, b);
+        }
+    }
+
+    // update fill_value
+    fill_value_ = (*fptr)(fill_value_, other.fill_value(), a, b);
+}
+
+
+template<typename T, typename I, size_t num_dim>
 inline typename map_array_t<T, I, num_dim>::index_type
 map_array_t<T, I, num_dim>::get_min_shape() const
 {
@@ -197,7 +242,7 @@ operator<<(std::ostream& out, const sparray::map_array_t<T, I, num_dim>& ma)
     for (; it != ma.end_nonzero(); ++it){
         std::cout << "    " << it->first << " -> " << it->second <<"\n";
     }
-    return out << "}";
+    return out << "}  w/ fill_value = " << ma.fill_value() << "\n";
 }
 
 #endif

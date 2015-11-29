@@ -1,3 +1,5 @@
+import operator
+
 import numpy as np
 from numpy.testing import (run_module_suite, TestCase, assert_equal, assert_,
                            assert_allclose, assert_raises,)
@@ -57,6 +59,75 @@ class TestBasic(TestCase):
         j = np.iinfo(np.int32).max + 1
         ma[1, j] = 1.
         ma.todense()
+
+    def test_copy(self):
+        ma = MapArray()
+        ma[1, 1] = 1.
+
+        # operate on a copy; the original must be intact
+        ma1 = ma.copy()
+        ma1[2, 4] = 3.
+
+        assert_equal(ma1.shape, (3, 5))
+        assert_allclose(ma1.todense(),
+                        np.array([[0, 0, 0, 0, 0],
+                                  [0, 1, 0, 0, 0], 
+                                  [0, 0, 0, 0, 3]]), atol=1e-15)
+        assert_equal(ma.shape, (2, 2))
+        assert_allclose(ma.todense(),
+                        np.array([[0, 0],
+                                  [0, 1]]), atol=1e-15)
+
+
+class TestArithmetics(TestCase):
+    ma = MapArray()
+    ma[1, 1] = 1.
+    ma[2, 4] = 2.
+
+    rhs = MapArray()
+    rhs[2, 4] = 3.
+    rhs.fill_value = -8
+
+    iop = operator.iadd
+    op = operator.add
+
+    def test_inplace_add_scalar(self):
+        ma1 = self.ma.copy()
+        self.iop(ma1, 4)      # IOW, ma1 += 4
+
+        assert_equal(ma1.shape, self.ma.shape)
+        assert_allclose(ma1.todense(),
+                        self.op(self.ma.todense(), 4.), atol=1e-15)
+
+    def test_inplace_add_unsupported_type_obj(self):
+        ma1 = self.ma.copy()
+        with assert_raises(TypeError):
+            self.iop(ma1, 'lalala')
+
+        with assert_raises(TypeError):
+            self.iop(ma1, None)
+
+        with assert_raises(TypeError):
+            self.iop(ma1, self.rhs.todense())
+
+    def test_inplace_add_sparse(self):
+        ma1 = self.ma.copy()
+        rhs = self.rhs.copy()
+        self.iop(ma1, rhs)
+
+        # the LHS is operated on, and RHS is intact
+        assert_allclose(ma1.todense(),
+                        self.ma.todense() + self.rhs.todense(), atol=1e-15)
+        assert_allclose(rhs.todense(), self.rhs.todense(), atol=1e-15)
+
+    def test_inplace_add_wrong_shape(self):
+        # incompatible shapes should raise ValueErrors
+        ma1 = self.ma.copy()
+        rhs = self.rhs.copy()
+        rhs[8, 9] = -101
+        with assert_raises(ValueError):
+            self.iop(ma1, rhs)
+
 
 
 if __name__ == "__main__":
