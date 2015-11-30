@@ -16,6 +16,15 @@ class TestBasic(TestCase):
         assert_equal(ma.shape, (0, 0))
         assert_allclose(ma.fill_value, 0., atol=1e-15)
 
+        ma = MapArray(shape=(3, 4))
+        assert_equal(ma.todense().shape, (3, 4))
+
+        ma = MapArray(shape=(3, 4), fill_value=42)
+        assert_equal(ma.fill_value, 42)
+
+        with assert_raises(TypeError):
+            MapArray(unknown='arg')
+
     def test_fill_value_mutable(self):
         ma = MapArray()
         ma.fill_value = -1.

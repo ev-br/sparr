@@ -29,6 +29,8 @@ struct map_array_t
     // this recomputes it, which is O(N).
     index_type get_min_shape() const;
 
+    // set the shape
+    void set_shape(const index_type& idx);
     T fill_value() const { return fill_value_; }
     void set_fill_value(const T& value) { fill_value_ = value; }
 
@@ -195,12 +197,29 @@ map_array_t<T, I, num_dim>::get_min_shape() const
     iter_nonzero_type it = this->begin_nonzero();
     for (; it != this->end_nonzero(); ++it){
         for (size_t j=0; j < num_dim; ++j){ 
-            if (it->second[j] >= sh[j]){
-                sh[j] = it->second[j] + 1;
+            if (it->first[j] >= sh[j]){
+                sh[j] = it->first[j] + 1;
             }
         }
     }
     return sh;
+}
+
+
+template<typename T, typename I, size_t num_dim>
+inline void 
+map_array_t<T, I, num_dim>::set_shape(const index_type& shp)
+{
+    index_type min_shape = get_min_shape();
+
+    for(size_t j = 0; j < num_dim; ++j){
+        if(shp[j] >= min_shape[j]){
+            shape_[j] = shp[j];
+        }
+        else{
+            throw std::domain_error("set_shape: arg too small!");
+        }
+    }
 }
 
 

@@ -8,7 +8,7 @@
 #  3. inplace operators (__iadd__ etc)
 #  4. check arg not None
 #  5. translate C++ exceptions
-#  6. constructors & parameters
+#  6. construct from_dense
 #
 #  Minor quibbles:
 #  1. access to elements of fixed_capacity: operator[] or ELEM macro
@@ -40,6 +40,7 @@ cdef extern from "sp_map.h" namespace "sparray":
         size_t ndim() const
         index_type shape() const
         index_type get_min_shape() const
+        void set_shape(const index_type&) except +
 
         T fill_value() const
         void set_fill_value(T value)
@@ -68,8 +69,23 @@ cdef class MapArray:
 
     __array_priority__ = 10.1     # equal to that of sparse matrices
 
-    def __cinit__(self):
+    def __init__(self, shape=None, fill_value=0):
+        pass
+
+    def __cinit__(self, shape=None, fill_value=0, *args, **kwds):
         self.thisptr = new map_array_t[double]()
+
+        cdef index_type shp
+        if shape:
+            if len(shape) != self.thisptr.ndim():
+                raise ValueError("Shape %s not undestood." % str(shape))
+
+            shp[0] = shape[0]   # TODO: ndim !=2
+            shp[1] = shape[1]
+            self.thisptr.set_shape(shp)
+
+        if fill_value is not None:
+            self.thisptr.set_fill_value(fill_value)
 
     def __dealloc__(self):
         del self.thisptr
@@ -121,7 +137,7 @@ cdef class MapArray:
     # TODO: 
     #        2. type casting 
     #        3. add more arithm ops: sub, mul, div, l/r shifts, mod etc
-    #        4. matmul and inplace axpy? 
+    #        4. matmul and inplace axpy?
 
     def __iadd__(self, other):
         cdef double d_other
