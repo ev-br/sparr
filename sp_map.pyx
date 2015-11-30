@@ -8,10 +8,12 @@
 #  3. inplace operators (__iadd__ etc)
 #  4. check arg not None
 #  5. translate C++ exceptions
+#  6. constructors & parameters
 #
 #  Minor quibbles:
 #  1. access to elements of fixed_capacity: operator[] or ELEM macro
 #  2. how to keep typedefs in sync between Cy and C++
+#  3. C++ things to receive a pointer-to-other (copy_from_other, binops)
 
 import numpy as np
 cimport numpy as cnp
@@ -49,7 +51,7 @@ cdef extern from "sp_map.h" namespace "sparray":
         T get_one(const index_type& idx) const 
         void set_one(const index_type& idx, const T& value)
 
-        void todense(void* dest, const single_index_type num_elem) const
+        void todense(void* dest, const single_index_type num_elem) except +
 
         void inplace_unary_op(T (*fptr)(T x, T a, T b), T a, T b)  # x <- f(x, a, b)
         void inplace_binary_op(T (*fptr)(T x, T y, T a, T b),

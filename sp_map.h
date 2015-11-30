@@ -220,6 +220,7 @@ map_array_t<T, I, num_dim>::todense(void* dest, const single_index_type num_elem
     map_array_t<T, I, num_dim>::iter_nonzero_type it = begin_nonzero();
     for(; it != end_nonzero(); ++it){
         single_index_type idx = _flat_index(it->first);
+        assert(idx < num_elem);
         _dest[idx] = it->second;
     }
 }
@@ -230,7 +231,8 @@ map_array_t<T, I, num_dim>::todense(void* dest, const single_index_type num_elem
 //        4. slicing
 //        5. special-case zero fill_value (memset, also matmul?)
 //        6. flat indexing for d != 2
-//        7. copy & inplace binop receive *pointers* (simplifies Cython?)
+//        7. copy & inplace binops receive *pointers* (simplifies Cython?)
+//        8. matmul & inplace axpy
 
 } // namespace sparray
 
