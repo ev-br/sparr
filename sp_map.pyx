@@ -36,7 +36,7 @@ cdef extern from "sp_map.h" namespace "sparray":
     cdef cppclass map_array_t[T]:
         map_array_t() except +
         map_array_t(const map_array_t&) except +
-        void copy_from_other(map_array_t&) except +
+        void copy_from_other(const map_array_t*) except +
 
         size_t ndim() const
         index_type shape() const
@@ -116,7 +116,7 @@ cdef class MapArray:
 
     def copy(self):
         newobj = MapArray()
-        newobj.thisptr.copy_from_other(self.thisptr[0])
+        newobj.thisptr.copy_from_other(self.thisptr)
         return newobj
 
     # TODO: 
@@ -154,7 +154,7 @@ cdef class MapArray:
                 return self.todense() + other
             else:
                 newobj = MapArray()
-                newobj.thisptr.copy_from_other((<MapArray>self).thisptr[0])  # XXX: copy_from_other(ptr)
+                newobj.thisptr.copy_from_other((<MapArray>self).thisptr)
                 return newobj.__iadd__(other)
         elif isinstance(other, MapArray):
             return other.__add__(self)
