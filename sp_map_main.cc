@@ -127,7 +127,7 @@ int main(){
         std::cout << ma << "\n";
         std::cout << rhs << "\n";
 
-        ma.inplace_binary_op(linear_binary_op<double>, rhs, 1., 1.);
+        ma.inplace_binary_op(linear_binary_op<double>, &rhs, 1., 1.);
 
         std::cout << "__iadd__: \n" << ma << "\n";
 

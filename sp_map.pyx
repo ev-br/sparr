@@ -13,7 +13,6 @@
 #  Minor quibbles:
 #  1. access to elements of fixed_capacity: operator[] or ELEM macro
 #  2. how to keep typedefs in sync between Cy and C++
-#  3. C++ things to receive a pointer-to-other (copy_from_other, binops)
 
 import numpy as np
 cimport numpy as cnp
@@ -55,7 +54,7 @@ cdef extern from "sp_map.h" namespace "sparray":
 
         void inplace_unary_op(T (*fptr)(T x, T a, T b), T a, T b)  # x <- f(x, a, b)
         void inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
-                               const map_array_t[T]& other, T a, T b) except +  # x <- f(x, y, a, b)
+                               const map_array_t[T] *p_other, T a, T b) except +  # x <- f(x, y, a, b)
 
 
 cdef extern from "elementwise_ops.h" namespace "sparray":
@@ -144,7 +143,7 @@ cdef class MapArray:
     # XXX: unify. Either both cast (<MapArray>self).thisptr,  or both dispatch onto a cdef function.
     cdef _iadd_maparr(MapArray self, MapArray other):
         self.thisptr.inplace_binary_op(linear_binary_op[double],
-                                       other.thisptr[0], 1., 1.)
+                                       other.thisptr, 1., 1.)
         return self
 
     def __add__(self, other):

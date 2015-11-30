@@ -200,6 +200,19 @@ class TestArithmetics(TestCase):
         assert_allclose(ma1,
                         self.op(self.ma.todense(), dense), atol=1e-15)
 
+    def test_op_self(self):
+        # check aliasing: op and iop with self in the r.h.s. should work OK
+        ma = self.ma.copy()
+
+        ma2 = self.op(ma, ma)
+        assert_allclose(ma2.todense(), 2. * self.ma.todense(), atol=1e-15)
+        assert_allclose(ma.todense(), self.ma.todense(), atol=1e-15)
+
+        # now test iop:
+        ma2 = self.ma.copy()
+        ma2 = self.iop(ma2, ma2)
+        assert_allclose(ma2.todense(), 2. * self.ma.todense(), atol=1e-15)
+
 
 if __name__ == "__main__":
     run_module_suite()

@@ -52,7 +52,7 @@ struct map_array_t
     // elementwise operations
     void inplace_unary_op(T (*fptr)(T x, T a, T b), T a, T b);  // x <- f(x, a, b)
     void inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
-                           map_array_t<T, I, num_dim>& other,
+                           const map_array_t<T, I, num_dim>* other,
                            T a,
                            T b); // x <- f(x, y, a, b), e.g. x <- a*x + b*y
 
@@ -143,13 +143,16 @@ map_array_t<T, I, num_dim>::inplace_unary_op(T (*fptr)(T x, T a, T b), T a, T b)
 template<typename T, typename I, size_t num_dim>
 inline void
 map_array_t<T, I, num_dim>::inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
-                                              map_array_t<T, I, num_dim>& other,
+                                              const map_array_t<T, I, num_dim> *p_other,
                                               T a,
                                               T b)
 {
+    if(!p_other)
+        throw std::logic_error("binop from NULL");
+
     // check that the dimensions are compatible
     for(size_t j=0; j<num_dim; ++j){
-        if(shape_[j] != other.shape()[j]){
+        if(shape_[j] != p_other->shape()[j]){
             // TODO: probably want to output the dimensions here
             throw std::invalid_argument("Binop: incompatible dimensions.");
         }
@@ -159,24 +162,26 @@ map_array_t<T, I, num_dim>::inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
     typename map_type::iterator it = data_.begin();
     for(; it != data_.end(); ++it){
         index_type idx = it->first;
-        T y = other.get_one(idx);           // NB: may equal other.fill_value
+        T y = p_other->get_one(idx);           // NB: may equal other.fill_value
         it->second = (*fptr)(it->second, y, a, b);
     }
 
-    // run over the nonzero elements of *other; those which are present in both
-    // *this and *other have been taken care of already. Insert new ones
-    // into *this. This loop's complexity is O(n2 * log(n1))
-    iter_nonzero_type it_other = other.begin_nonzero();
-    for(; it_other != other.end_nonzero(); ++it_other){
-        index_type idx = it_other->first;
-        it = data_.find(idx);
-        if (it == data_.end()){
-            data_[idx] = (*fptr)(fill_value_, it_other->second, a, b);
+    if(p_other != this){
+        // run over the nonzero elements of *other; those which are present in both
+        // *this and *other have been taken care of already. Insert new ones
+        // into *this. This loop's complexity is O(n2 * log(n1))
+        iter_nonzero_type it_other = p_other->begin_nonzero();
+        for(; it_other != p_other->end_nonzero(); ++it_other){
+            index_type idx = it_other->first;
+            it = data_.find(idx);
+            if (it == data_.end()){
+                data_[idx] = (*fptr)(fill_value_, it_other->second, a, b);
+            }
         }
     }
 
     // update fill_value
-    fill_value_ = (*fptr)(fill_value_, other.fill_value(), a, b);
+    fill_value_ = (*fptr)(fill_value_, p_other->fill_value(), a, b);
 }
 
 
@@ -237,7 +242,6 @@ map_array_t<T, I, num_dim>::todense(void* dest, const single_index_type num_elem
 //        4. slicing
 //        5. special-case zero fill_value (memset, also matmul?)
 //        6. flat indexing for d != 2
-//        7. copy & inplace binops receive *pointers* (simplifies Cython?)
 //        8. matmul & inplace axpy
 
 } // namespace sparray
