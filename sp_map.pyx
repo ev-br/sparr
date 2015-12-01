@@ -64,6 +64,14 @@ cdef extern from "elementwise_ops.h" namespace "sparray":
     T linear_binary_op[T](T, T, T, T)
 
 
+cdef index_type index_from_tuple(tuple tpl):
+    # conversion helper: 2D only.
+    cdef index_type idx
+    idx[0] = tpl[0]
+    idx[1] = tpl[1]
+    return idx
+
+
 cdef class MapArray:
     cdef map_array_t[double] *thisptr
 
@@ -80,8 +88,7 @@ cdef class MapArray:
             if len(shape) != self.thisptr.ndim():
                 raise ValueError("Shape %s not undestood." % str(shape))
 
-            shp[0] = shape[0]   # TODO: ndim !=2
-            shp[1] = shape[1]
+            shp = index_from_tuple(shape)
             self.thisptr.set_shape(shp)
 
         if fill_value is not None:
@@ -115,16 +122,11 @@ cdef class MapArray:
 
     def __getitem__(self, tpl):
         # this is pretty much one big bug
-        cdef int i = tpl[0], j = tpl[1]
-        cdef index_type idx
-        idx[0] = i
-        idx[1] = j
+        cdef index_type idx = index_from_tuple(tpl)
         return self.thisptr.get_one(idx)
 
     def __setitem__(self, tpl, value):
-        cdef index_type idx
-        idx[0] = tpl[0]
-        idx[1] = tpl[1]
+        cdef index_type idx = index_from_tuple(tpl)
         self.thisptr.set_one(idx, value)
 
     ###### Arithmetics #############
