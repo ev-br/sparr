@@ -72,16 +72,116 @@ cdef index_type index_from_tuple(tuple tpl):
     return idx
 
 
+<<<<<<< HEAD
+=======
+#ctypedef fused duck_t:
+#    double
+#    float
+#    long
+
+
+#cdef union union_t:
+#    map_array_t[long] *longptr
+#    map_array_t[float] *floatptr
+#    map_array_t[double] *doubleptr
+
+
+#cdef class MapArray2:
+#    cdef union_t p
+#    cdef object dtype
+
+#    def __cinit__(self, dtype=float):
+
+#        self.dtype = np.dtype(dtype)     # seems to convert float etc to numpy dtypes?
+
+#        cdef int typenum = self.dtype.num
+#        if typenum == cnp.NPY_DOUBLE: 
+#            self.p.doubleptr = new map_array_t[double]()
+#        elif typenum == cnp.NPY_FLOAT:
+#            self.p.floatptr = new map_array_t[float]()
+#        elif typenum == cnp.NPY_INT:
+#            self.p.longptr = new map_array_t[long]()
+#        else:
+#            raise ValueError("dtype %s  not supported." % dtype)
+
+#        print(">>> ", dtype, typenum)
+
+#    def __dealloc__(self):
+#        cdef int typenum = self.dtype.num
+
+#        if typenum == cnp.NPY_DOUBLE: 
+#            del self.p.doubleptr
+#        elif typenum == cnp.NPY_FLOAT:
+#            del self.p.floatptr
+#        elif typenum == cnp.NPY_INT:
+#            del self.p.longptr
+#        else:
+#            raise ValueError("Panic! Unsupported dtype %s  in dtor." % self.dtype)
+
+#    property dtype:
+#        def __get__(self):
+#            return self.dtype
+
+#    ###### Arithmetics #######
+
+#    def __iadd__(self, other):
+#        cdef int typenum = self.dtype.num
+
+#        if typenum == cnp.NPY_DOUBLE: 
+#            return iadd_method[double](self.p.doubleptr, other, 1.0)
+#        elif typenum == cnp.NPY_FLOAT:
+#            return iadd_method[float](self, other, 1.0)
+#        else:
+#            raise ValueError("Panic! Unsupported dtype %s  in __iadd__." % self.dtype)
+
+
+#### Methods
+
+#def iadd_method(self, other, duck_t unused):
+#    cdef duck_t d_other
+#    if isinstance(other, MapArray):
+#        self.thisptr.inplace_binary_op(linear_binary_op[double],
+#                                       other.thisptr, 1., 1.)
+#        return self
+#    elif isinstance(other, np.ndarray):
+#        # hand over to __add__ for densification
+#        return NotImplemented
+#    else:
+#        # it must be a scalar
+#        try:
+#            d_other = <duck_t?>(other)
+#            self.thisptr.inplace_unary_op(linear_unary_op[duck_t], 1., d_other)
+#            return self
+#        except TypeError:
+#            # strings, lists and other animals
+#            return NotImplemented
+
+
+
+#    cdef _iadd_maparr(MapArray self, MapArray other):
+#        self.thisptr.inplace_binary_op(linear_binary_op[double],
+#                                       other.thisptr, 1., 1.)
+#        return self
+
+
+###########################################################################
+
+
+>>>>>>> MAINT: use tuple-> index-type helper, refactor __iadd__ store the typenum
 cdef class MapArray:
     cdef map_array_t[double] *thisptr
+    cdef cnp.NPY_TYPES typenum
 
     __array_priority__ = 10.1     # equal to that of sparse matrices
 
-    def __init__(self, shape=None, fill_value=0):
+    def __init__(self, dtype=float, shape=None, fill_value=0):
         pass
 
-    def __cinit__(self, shape=None, fill_value=0, *args, **kwds):
+    def __cinit__(self, dtype=float, shape=None, fill_value=0, *args, **kwds):
         self.thisptr = new map_array_t[double]()
+
+        dtype = np.dtype(dtype)   # seems to convert float etc to numpy dtypes?
+        self.typenum = dtype.num
 
         cdef index_type shp
         if shape:
@@ -141,43 +241,47 @@ cdef class MapArray:
     #        3. add more arithm ops: sub, mul, div, l/r shifts, mod etc
     #        4. matmul and inplace axpy?
 
-    def __iadd__(self, other):
-        cdef double d_other
-        if isinstance(other, MapArray):
-            return self._iadd_maparr(other)
-        elif isinstance(other, np.ndarray):
+    def __iadd__(MapArray self not None, other):
+
+        if isinstance(other, np.ndarray): 
             # hand over to __add__ for densification
             return NotImplemented
-        else:
-            # it must be a scalar
-            try:
-                d_other = <double?>(other)
-                self.thisptr.inplace_unary_op(linear_unary_op[double], 1., d_other)
-                return self
-            except TypeError:
-                # strings, lists and other animals
-                return NotImplemented
 
-    # XXX: unify. Either both cast (<MapArray>self).thisptr,  or both dispatch onto a cdef function.
-    cdef _iadd_maparr(MapArray self, MapArray other):
-        self.thisptr.inplace_binary_op(linear_binary_op[double],
-                                       other.thisptr, 1., 1.)
-        return self
+        if isinstance(other, MapArray):
+            self.thisptr.inplace_binary_op(linear_binary_op[double],
+                                           (<MapArray>other).thisptr, 1., 1.)
+            return self
+
+        # it must be a scalar then
+        cdef double pod_other
+        try:
+            pod_other = <double?>(other)
+            self.thisptr.inplace_unary_op(linear_unary_op[double], 1., pod_other)
+            return self
+        except TypeError:
+            # strings, lists and other animals
+            return NotImplemented
 
     def __add__(self, other):
         if isinstance(self, MapArray):
             if isinstance(other, np.ndarray):
-                # Densify return dense result
+                # Densify and return dense result
                 return self.todense() + other
             else:
-                newobj = MapArray()
-                newobj.thisptr.copy_from_other((<MapArray>self).thisptr)
+                newobj = self.copy()
                 return newobj.__iadd__(other)
         elif isinstance(other, MapArray):
             return other.__add__(self)
         else:
             # how come?
             raise RuntimeError("__add__ : never be here ", self, other)
+
+
+    # XXX: unify. Either both cast (<MapArray>self).thisptr,  or both dispatch onto a cdef function.
+    cdef _iadd_maparr(MapArray self, MapArray other):
+        self.thisptr.inplace_binary_op(linear_binary_op[double],
+                                       other.thisptr, 1., 1.)
+        return self
 
 
     def __isub__(MapArray self, double other):

@@ -22,6 +22,10 @@ class TestBasic(TestCase):
         ma = MapArray(shape=(3, 4), fill_value=42)
         assert_equal(ma.fill_value, 42)
 
+#        ma = MapArray((3, 4), 42)
+#        assert_equal(ma.shape, (3, 4))
+#        assert_equal(ma.fill_value, 42)
+
         with assert_raises(TypeError):
             MapArray(unknown='arg')
 
