@@ -6,7 +6,7 @@ from numpy.testing import (run_module_suite, TestCase, assert_equal, assert_,
                            assert_allclose, assert_raises,)
 from numpy.testing.decorators import knownfailureif, skipif
 
-from sp_map import MapArray
+from sp_map import MapArray2 as MapArray
 
 
 class TestBasic(TestCase):

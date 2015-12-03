@@ -73,98 +73,174 @@ cdef index_type index_from_tuple(tuple tpl):
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 #ctypedef fused duck_t:
 #    double
 #    float
 #    long
+=======
+cdef union union_t:
+    map_array_t[long] *long_ptr
+    map_array_t[float] *float_ptr
+    map_array_t[double] *double_ptr
+>>>>>>> ENH: first version of multiple dtype support
 
 
-#cdef union union_t:
-#    map_array_t[long] *longptr
-#    map_array_t[float] *floatptr
-#    map_array_t[double] *doubleptr
+cdef class MapArray2:
+    cdef union_t p
+    cdef object dtype
+
+    __array_priority__ = 10.1     # equal to that of sparse matrices
+
+    def __cinit__(self, dtype=float, shape=None, fill_value=0, *args, **kwds):
+
+        self.dtype = np.dtype(dtype)     # seems to convert float etc to numpy dtypes?
+
+        cdef int typenum = self.dtype.num
+        if typenum == cnp.NPY_DOUBLE: 
+            self.p.double_ptr = new map_array_t[double]()
+        elif typenum == cnp.NPY_FLOAT:
+            self.p.float_ptr = new map_array_t[float]()
+        elif typenum == cnp.NPY_INT:
+            self.p.long_ptr = new map_array_t[long]()
+        else:
+            raise ValueError("dtype %s  not supported." % dtype)
+
+        print(">>> ", dtype, typenum)
+
+    def __dealloc__(self):
+        cdef int typenum = self.dtype.num
+
+        if typenum == cnp.NPY_DOUBLE: 
+            del self.p.double_ptr
+        elif typenum == cnp.NPY_FLOAT:
+            del self.p.float_ptr
+        elif typenum == cnp.NPY_INT:
+            del self.p.long_ptr
+        else:
+            raise ValueError("Panic! Unsupported dtype %s  in dtor." % self.dtype)
+
+    #### Public interface accessors #####
+
+    property dtype:
+        def __get__(self):
+            return self.dtype
+
+    property ndim:
+        def __get__(self):
+            return self.p.double_ptr.ndim()
+
+    property fill_value:
+        def __get__(self):
+            return self.p.double_ptr.fill_value()
+
+        def __set__(self, value):
+            self.p.double_ptr.set_fill_value(value)
+
+    property shape:
+        def __get__(self):
+            cdef index_type sh = self.p.double_ptr.shape()
+            return sh[0], sh[1]   # TODO: ndim != 2
+
+    def count_nonzero(self):
+        return self.p.double_ptr.count_nonzero()
 
 
-#cdef class MapArray2:
-#    cdef union_t p
-#    cdef object dtype
+    def copy(self):
+        newobj = MapArray2(self.dtype)
 
-#    def __cinit__(self, dtype=float):
+        cdef int typenum = self.dtype.num
+        if typenum == cnp.NPY_DOUBLE:
+            newobj.p.double_ptr.copy_from_other(self.p.double_ptr)
+            return newobj
+        if typenum == cnp.NPY_FLOAT:
+            newobj.p.float_ptr.copy_from_other(self.p.float_ptr)
+            return newobj
+        if typenum == cnp.NPY_INT:
+            newobj.p.long_ptr.copy_from_other(self.p.long_ptr)
+            return newobj
+        raise ValueError("copy: never be here. dtype = " % self.dtype)
 
-#        self.dtype = np.dtype(dtype)     # seems to convert float etc to numpy dtypes?
+    def todense(self):
+        cdef int nd = <int>self.p.double_ptr.ndim()
+        cdef cnp.ndarray a = PyArray_SimpleNew(self.p.double_ptr.ndim(),
+                                               <npy_intp*>self.p.double_ptr.shape().elem_,
+                                               NPY_DOUBLE)
+        self.p.double_ptr.todense(PyArray_DATA(a), PyArray_SIZE(a))
+        return a
 
-#        cdef int typenum = self.dtype.num
-#        if typenum == cnp.NPY_DOUBLE: 
-#            self.p.doubleptr = new map_array_t[double]()
-#        elif typenum == cnp.NPY_FLOAT:
-#            self.p.floatptr = new map_array_t[float]()
-#        elif typenum == cnp.NPY_INT:
-#            self.p.longptr = new map_array_t[long]()
-#        else:
-#            raise ValueError("dtype %s  not supported." % dtype)
+    ##### Access single elements #####
 
-#        print(">>> ", dtype, typenum)
+    def __getitem__(self, tpl):
+        # this is pretty much one big bug
+        cdef index_type idx = index_from_tuple(tpl)
+        return self.p.double_ptr.get_one(idx)
 
-#    def __dealloc__(self):
-#        cdef int typenum = self.dtype.num
+    def __setitem__(self, tpl, value):
+        cdef index_type idx = index_from_tuple(tpl)
+        self.p.double_ptr.set_one(idx, value)
 
-#        if typenum == cnp.NPY_DOUBLE: 
-#            del self.p.doubleptr
-#        elif typenum == cnp.NPY_FLOAT:
-#            del self.p.floatptr
-#        elif typenum == cnp.NPY_INT:
-#            del self.p.longptr
-#        else:
-#            raise ValueError("Panic! Unsupported dtype %s  in dtor." % self.dtype)
-
-#    property dtype:
-#        def __get__(self):
-#            return self.dtype
 
 #    ###### Arithmetics #######
 
-#    def __iadd__(self, other):
-#        cdef int typenum = self.dtype.num
+    def __iadd__(MapArray2 self not None, other):
 
-#        if typenum == cnp.NPY_DOUBLE: 
-#            return iadd_method[double](self.p.doubleptr, other, 1.0)
-#        elif typenum == cnp.NPY_FLOAT:
-#            return iadd_method[float](self, other, 1.0)
-#        else:
-#            raise ValueError("Panic! Unsupported dtype %s  in __iadd__." % self.dtype)
+        if isinstance(other, np.ndarray): 
+            # hand over to __add__ for densification
+            return NotImplemented
+
+        cdef int typenum = self.dtype.num
+        if isinstance(other, MapArray2):
+            if typenum == NPY_DOUBLE:
+                self.p.double_ptr.inplace_binary_op(linear_binary_op[double],
+                                                    (<MapArray2>other).p.double_ptr, 1., 1.)  # BUG: mixed-type ops
+                return self
+            if typenum == cnp.NPY_FLOAT:
+                self.p.float_ptr.inplace_binary_op(linear_binary_op[float],
+                                                   (<MapArray2>other).p.float_ptr, 1., 1.)
+                return self
+            raise ValueError("iadd(MapArray): unhandled dtype %s." % self.dtype)
+
+        # it must be a scalar then; BUG: double only
+        cdef double double_other
+        if typenum == cnp.NPY_DOUBLE:
+            try:
+                double_other = <double?>(other)
+                self.p.double_ptr.inplace_unary_op(linear_unary_op[double], 1., double_other)
+                return self
+            except TypeError:
+                # strings, lists and other animals
+                return NotImplemented
+
+        cdef float float_other
+        if typenum == cnp.NPY_FLOAT:
+            try:
+                float_other = <float?>(other)
+                self.p.float_ptr.inplace_unary_op(linear_unary_op[float], 1., float_other)
+                return self
+            except TypeError:
+                # strings, lists and other animals
+                return NotImplemented
+        raise ValueError("iadd(scalar): unhandled dtype %s." % self.dtype)
 
 
-#### Methods
-
-#def iadd_method(self, other, duck_t unused):
-#    cdef duck_t d_other
-#    if isinstance(other, MapArray):
-#        self.thisptr.inplace_binary_op(linear_binary_op[double],
-#                                       other.thisptr, 1., 1.)
-#        return self
-#    elif isinstance(other, np.ndarray):
-#        # hand over to __add__ for densification
-#        return NotImplemented
-#    else:
-#        # it must be a scalar
-#        try:
-#            d_other = <duck_t?>(other)
-#            self.thisptr.inplace_unary_op(linear_unary_op[duck_t], 1., d_other)
-#            return self
-#        except TypeError:
-#            # strings, lists and other animals
-#            return NotImplemented
+    def __add__(self, other):
+        if isinstance(self, MapArray2):
+            if isinstance(other, np.ndarray):
+                # Densify and return dense result
+                return self.todense() + other
+            else:
+                newobj = self.copy()
+                return newobj.__iadd__(other)
+        elif isinstance(other, MapArray2):
+            return other.__add__(self)
+        else:
+            # how come?
+            raise RuntimeError("__add__ : never be here ", self, other)
 
 
-
-#    cdef _iadd_maparr(MapArray self, MapArray other):
-#        self.thisptr.inplace_binary_op(linear_binary_op[double],
-#                                       other.thisptr, 1., 1.)
-#        return self
-
-
-###########################################################################
+##########################################################################
 
 
 >>>>>>> MAINT: use tuple-> index-type helper, refactor __iadd__ store the typenum
