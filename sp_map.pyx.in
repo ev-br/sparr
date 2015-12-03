@@ -1,0 +1,319 @@
+# A 'sparse array' wrapper
+
+# distutils: language = c++
+
+### TODO:
+#  1. expose dimensionality template param
+#  2. need to expose iterators to sp_map_t?
+#  4. check arg not None
+#  5. translate all C++ exceptions
+#  6. int types between C++ and Cy, esp int, npy_intp etc
+#  7. slices
+#
+#  7. construct from_dense
+#  8. add more binops (__mul__)
+#  9. add matmul and operator @
+#  10. add more Py types
+#  11. type casts: float + int
+#  12. to_csr interop
+#
+#  Minor quibbles:
+#  1. access to elements of fixed_capacity: operator[] or ELEM macro
+#  2. how to keep typedefs in sync between Cy and C++
+#  3. avoid having a CMD string substitution
+
+import numpy as np
+cimport numpy as cnp
+from numpy cimport PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE, npy_intp
+
+
+cdef extern from "fixed_cap.h" namespace "sparray":
+    cdef cppclass fixed_capacity[I]:
+        fixed_capacity() except +
+        fixed_capacity(const I*) except +
+        I& operator[](size_t j) except +
+        long int[] elem_
+
+
+ctypedef long int single_index_type            # this needs ot be in sync w/C++
+ctypedef fixed_capacity[long int] index_type   # XXX: can't do fixed_capacity[single_index_type]
+
+
+cdef extern from "sp_map.h" namespace "sparray":
+    cdef cppclass map_array_t[T]:
+        map_array_t() except +
+        map_array_t(const map_array_t&) except +
+        void copy_from_other(const map_array_t*) except +
+
+        size_t ndim() const
+        index_type shape() const
+        index_type get_min_shape() const
+        void set_shape(const index_type&) except +
+
+        T fill_value() const
+        void set_fill_value(T value)
+
+        size_t count_nonzero() const
+
+        # single element accessors
+        T get_one(const index_type& idx) const 
+        void set_one(const index_type& idx, const T& value)
+
+        void todense(void* dest, const single_index_type num_elem) except +
+
+        void inplace_unary_op(T (*fptr)(T x, T a, T b), T a, T b)  # x <- f(x, a, b)
+        void inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
+                               const map_array_t[T] *p_other, T a, T b) except +  # x <- f(x, y, a, b)
+
+
+cdef extern from "elementwise_ops.h" namespace "sparray":
+    T linear_unary_op[T](T, T, T)
+    T power_unary_op[T](T, T, T)
+    T linear_binary_op[T](T, T, T, T)
+
+
+cdef index_type index_from_tuple(tuple tpl):
+    # conversion helper: 2D only.
+    cdef index_type idx
+    idx[0] = tpl[0]
+    idx[1] = tpl[1]
+    return idx
+
+
+{{py: 
+CTYPES = ['long', 'float', 'double']
+TNUMS = ['cnp.NPY_LONG', 'cnp.NPY_FLOAT', 'cnp.NPY_DOUBLE']
+CMDS = ['if'] + ['elif']*(len(TNUMS) - 1)
+}}
+
+
+cdef union union_t:
+{{for CT in CTYPES}}
+    map_array_t[{{CT}}] *{{CT}}_ptr
+{{endfor}}
+
+
+cdef class MapArray:
+    cdef union_t p
+    cdef object dtype
+
+    __array_priority__ = 10.1     # equal to that of sparse matrices
+
+    def __init__(self, shape=None, fill_value=0, dtype=float):
+        pass
+
+    def __cinit__(self, shape=None, fill_value=0, dtype=float, *args, **kwds):
+
+        # this seems to convert float etc to numpy dtypes
+        self.dtype = np.dtype(dtype)
+
+        # allocate memory on the correct type pointer
+        cdef int typenum = self.dtype.num
+
+        {{for NUM, CT, CMD in zip(TNUMS, CTYPES, CMDS)}}
+        {{CMD}} typenum == {{NUM}}:
+            self.p.{{CT}}_ptr = new map_array_t[{{CT}}]()
+        {{endfor}}
+        else:
+            raise ValueError("dtype %s  not supported." % dtype)
+
+        # handle shape
+        try:
+            self._set_shape(shape)
+        except TypeError:
+            raise TypeError("Shape must be a tuple, got %s." % shape)
+
+        #handle fill_value
+        self.fill_value = fill_value
+
+    def __dealloc__(self):
+        cdef int typenum = self.dtype.num
+        {{for NUM, CT, CMD in zip(TNUMS, CTYPES, CMDS)}}
+        {{CMD}} typenum == {{NUM}}:
+            del self.p.{{CT}}_ptr
+        {{endfor}}
+        else:
+            raise ValueError("Panic! Unsupported dtype %s  in dtor." % self.dtype)
+
+    #### Public interface accessors #####
+
+    property dtype:
+        def __get__(self):
+            return self.dtype
+
+    property ndim:
+        def __get__(self):
+            cdef int typenum = self.dtype.num
+            {{for NUM, C, CMD in zip(TNUMS, CTYPES, CMDS)}}
+            {{CMD}} typenum == {{NUM}}:
+                return self.p.{{C}}_ptr.ndim()
+            {{endfor}}
+            else:
+                raise TypeError("ndim: dtype = %s unhandled." % self.dtype)
+
+    property fill_value:
+        def __get__(self):
+            cdef int typenum = self.dtype.num
+            {{for NUM, C, CMD in zip(TNUMS, CTYPES, CMDS)}}
+            {{CMD}} typenum == {{NUM}}:
+                return self.p.{{C}}_ptr.fill_value()
+            {{endfor}}
+            else:
+                raise TypeError("fill_value: dtype = %s unhandled." % self.dtype)
+
+        def __set__(self, value):
+            cdef int typenum = self.dtype.num
+            {{for NUM, C, CMD in zip(TNUMS, CTYPES, CMDS)}}
+            {{CMD}} typenum == {{NUM}}:
+                self.p.{{C}}_ptr.set_fill_value(value)
+            {{endfor}}
+            else:
+                raise TypeError("fill_value: dtype = %s unhandled." % self.dtype)
+
+    property shape:
+        def __get__(self):
+            cdef index_type sh
+            cdef int typenum = self.dtype.num
+            {{for NUM, C, CMD in zip(TNUMS, CTYPES, CMDS)}}
+            {{CMD}} typenum == {{NUM}}:
+                sh = self.p.{{C}}_ptr.shape()
+                return sh[0], sh[1]           # TODO: ndim != 2
+            {{endfor}}
+            else:
+                raise TypeError("shape: dtype = %s unhandled." % self.dtype)
+
+    cdef void _set_shape(self, object shape):
+        # shape setter is private, only call it from __cinit__
+        if not shape:
+            shape = (0,)*self.ndim
+
+        if len(shape) != self.ndim:
+            raise TypeError("Shape %s not undestood." % str(shape))
+
+        cdef index_type shp = index_from_tuple(shape)
+        cdef int typenum = self.dtype.num
+        {{for NUM, C, CMD in zip(TNUMS, CTYPES, CMDS)}}
+        {{CMD}} typenum == {{NUM}}:
+            self.p.{{C}}_ptr.set_shape(shp)
+        {{endfor}}
+        else:
+            raise TypeError("shape setter: dtype = %s unhandled." % self.dtype)
+
+    def count_nonzero(self):
+        cdef int typenum = self.dtype.num
+        {{for NUM, C, CMD in zip(TNUMS, CTYPES, CMDS)}}
+        {{CMD}} typenum == {{NUM}}:
+            return self.p.{{C}}_ptr.count_nonzero()
+        {{endfor}}
+        raise TypeError("count_nonzero: dtype = %s unhandled." % self.dtype)
+
+
+    def copy(self):
+        newobj = MapArray(self.dtype)
+        newobj.dtype = self.dtype
+
+        cdef int typenum = self.dtype.num
+        {{for NUM, CT, CMD in zip(TNUMS, CTYPES, CMDS)}}
+        {{CMD}} typenum == {{NUM}}:
+            newobj.p.{{CT}}_ptr.copy_from_other(self.p.{{CT}}_ptr)
+            return newobj
+        {{endfor}}
+        raise TypeError("copy: never be here. dtype = " % self.dtype)
+
+    def todense(self):
+        cdef:
+            int nd
+            cnp.ndarray a
+            int typenum = self.dtype.num
+
+        {{for NUM, CT in zip(TNUMS, CTYPES)}}
+        if typenum == {{NUM}}:
+
+            nd = <int>self.p.{{CT}}_ptr.ndim()
+            a = PyArray_SimpleNew(nd,
+                                  <npy_intp*>self.p.{{CT}}_ptr.shape().elem_,
+                                  {{NUM}})
+            self.p.{{CT}}_ptr.todense(PyArray_DATA(a), PyArray_SIZE(a))
+            return a
+        {{endfor}}
+        raise TypeError("todense: never be here. dtype = " % self.dtype)        
+
+
+    ##### Single element access #####
+
+    def __getitem__(self, tpl):
+        # 2D is hardcoded; no slicing; no input validation
+        cdef index_type idx = index_from_tuple(tpl)
+
+        cdef int typenum = self.dtype.num
+        {{for NUM, CT in zip(TNUMS, CTYPES)}}
+        if typenum == {{NUM}}:
+            return self.p.{{CT}}_ptr.get_one(idx)
+        {{endfor}}
+        raise TypeError("__getitem__: dtype = %s not understood." % self.dtype)
+
+    def __setitem__(self, tpl, value):
+        cdef index_type idx = index_from_tuple(tpl)
+
+        cdef int typenum = self.dtype.num
+        {{for NUM, CT, CMD in zip(TNUMS, CTYPES, CMDS)}}
+        {{CMD}} typenum == {{NUM}}:
+            self.p.{{CT}}_ptr.set_one(idx, value)
+        {{endfor}}
+        else:
+            raise TypeError("__setitem__: dtype = %s not understood." % self.dtype)
+
+    ###### Arithmetics #######
+
+    # TODO: 
+    #        2. type casting 
+    #        3. add more arithm ops: sub, mul, div, l/r shifts, mod etc
+
+    def __iadd__(MapArray self not None, other):
+
+        if isinstance(other, np.ndarray): 
+            # hand over to __add__ for densification
+            return NotImplemented
+
+        cdef int typenum = self.dtype.num
+        if isinstance(other, MapArray):
+            {{for NUM, CT in zip(TNUMS, CTYPES)}}
+            if typenum == {{NUM}}:
+                self.p.{{CT}}_ptr.inplace_binary_op(linear_binary_op[{{CT}}],
+                                                    (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>1)  # BUG: mixed-type ops
+                return self
+            {{endfor}}
+            raise ValueError("iadd(MapArray): unhandled dtype %s." % self.dtype)
+
+        # it must be a scalar then
+        {{for NUM, CT in zip(TNUMS, CTYPES)}}
+        cdef {{CT}} {{CT}}_other
+        if typenum == {{NUM}}:
+            try:
+                # try casting to a POD: double_other = <double?>(other) etc (Cython syntax)
+                {{CT}}_other = <{{CT}}?>(other)
+                self.p.{{CT}}_ptr.inplace_unary_op(linear_unary_op[{{CT}}], <{{CT}}>1, {{CT}}_other)
+                return self
+            except TypeError:
+                # strings, lists and other animals
+                return NotImplemented
+        {{endfor}}
+        raise ValueError("iadd(scalar): unhandled dtype %s." % self.dtype)
+
+
+    def __add__(self, other):
+        if isinstance(self, MapArray):
+            if isinstance(other, np.ndarray):
+                # Densify and return dense result
+                return self.todense() + other
+            else:
+                newobj = self.copy()
+                return newobj.__iadd__(other)
+        elif isinstance(other, MapArray):
+            return other.__add__(self)
+        else:
+            # how come?
+            raise RuntimeError("__add__ : never be here ", self, other)
+
+
+cnp.import_array()

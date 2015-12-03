@@ -6,38 +6,39 @@ from numpy.testing import (run_module_suite, TestCase, assert_equal, assert_,
                            assert_allclose, assert_raises,)
 from numpy.testing.decorators import knownfailureif, skipif
 
-from sp_map import MapArray2 as MapArray
+from sp_map import MapArray
 
 
-class TestBasic(TestCase):
+class BasicMixin(object):
     def test_ctor(self):
-        ma = MapArray()
+        ma = MapArray(dtype=self.dtype)
+        assert_equal(ma.dtype, self.dtype)
         assert_equal(ma.ndim, 2)
         assert_equal(ma.shape, (0, 0))
         assert_allclose(ma.fill_value, 0., atol=1e-15)
 
-        ma = MapArray(shape=(3, 4))
+        ma = MapArray(shape=(3, 4), dtype=self.dtype)
         assert_equal(ma.todense().shape, (3, 4))
 
-        ma = MapArray(shape=(3, 4), fill_value=42)
+        ma = MapArray(shape=(3, 4), fill_value=42, dtype=self.dtype)
         assert_equal(ma.fill_value, 42)
 
-#        ma = MapArray((3, 4), 42)
-#        assert_equal(ma.shape, (3, 4))
-#        assert_equal(ma.fill_value, 42)
+        ma = MapArray((3, 4), 42, dtype=self.dtype)
+        assert_equal(ma.shape, (3, 4))
+        assert_equal(ma.fill_value, 42)
 
         with assert_raises(TypeError):
             MapArray(unknown='arg')
 
     def test_fill_value_mutable(self):
-        ma = MapArray()
+        ma = MapArray(dtype=self.dtype)
         ma.fill_value = -1.
         assert_equal(ma.fill_value, -1)
         with assert_raises(TypeError):
             ma.fill_value = 'lalala'
 
     def test_basic_insert(self):
-        ma = MapArray()
+        ma = MapArray(dtype=self.dtype)
         ma[1, 1] = -1
         assert_equal(ma.shape, (2, 2))
         assert_equal(ma.ndim, 2)
@@ -56,7 +57,7 @@ class TestBasic(TestCase):
                                   [0, 0, 0, 8]]), atol=1e-15)
 
     def test_todense_fillvalue(self):
-        ma = MapArray()
+        ma = MapArray(dtype=self.dtype)
         ma[2, 3] = 8
         ma[1, 1] = -1
         ma.fill_value = 1
@@ -75,7 +76,7 @@ class TestBasic(TestCase):
         ma.todense()
 
     def test_copy(self):
-        ma = MapArray()
+        ma = MapArray(dtype=self.dtype)
         ma[1, 1] = 1.
 
         # operate on a copy; the original must be intact
@@ -93,7 +94,19 @@ class TestBasic(TestCase):
                                   [0, 1]]), atol=1e-15)
 
 
-class TestArithmetics(TestCase):
+class TestBasicDouble(BasicMixin, TestCase):
+    dtype = float
+
+
+class TestBasicFloat(BasicMixin, TestCase):
+    dtype = np.float32
+
+
+class TestBasicPyInt(BasicMixin, TestCase):
+    dtype = int
+
+
+class ArithmeticsMixin(object):
     ma = MapArray()
     ma[1, 1] = 1.
     ma[2, 4] = 2.
@@ -225,6 +238,18 @@ class TestArithmetics(TestCase):
         ma2 = self.ma.copy()
         ma2 = self.iop(ma2, ma2)
         assert_allclose(ma2.todense(), 2. * self.ma.todense(), atol=1e-15)
+
+
+class TestArithmDouble(ArithmeticsMixin, TestCase):
+    dtype = float
+
+
+class TestArithmFloat(ArithmeticsMixin, TestCase):
+    dtype = np.float32
+
+
+class TestArithmPyInt(ArithmeticsMixin, TestCase):
+    dtype = int
 
 
 if __name__ == "__main__":
