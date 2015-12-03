@@ -145,7 +145,7 @@ class ArithmeticsMixin(object):
         # the LHS is operated on, and RHS is intact
         assert_(isinstance(ma1, MapArray))
         assert_allclose(ma1.todense(),
-                        self.ma.todense() + self.rhs.todense(), atol=1e-15)
+                        self.op(self.ma.todense(), self.rhs.todense()), atol=1e-15)
         assert_allclose(rhs.todense(), self.rhs.todense(), atol=1e-15)
 
     def test_inplace_iop_wrong_shape(self):
@@ -231,13 +231,15 @@ class ArithmeticsMixin(object):
         ma = self.ma.copy()
 
         ma2 = self.op(ma, ma)
-        assert_allclose(ma2.todense(), 2. * self.ma.todense(), atol=1e-15)
+        assert_allclose(ma2.todense(),
+                        self.op(ma.todense(), ma.todense()), atol=1e-15)
         assert_allclose(ma.todense(), self.ma.todense(), atol=1e-15)
 
         # now test iop:
         ma2 = self.ma.copy()
         ma2 = self.iop(ma2, ma2)
-        assert_allclose(ma2.todense(), 2. * self.ma.todense(), atol=1e-15)
+        assert_allclose(ma2.todense(),
+                        self.op(ma.todense(), ma.todense()), atol=1e-15)
 
 
 class TestArithmDouble(ArithmeticsMixin, TestCase):
@@ -249,6 +251,23 @@ class TestArithmFloat(ArithmeticsMixin, TestCase):
 
 
 class TestArithmPyInt(ArithmeticsMixin, TestCase):
+    dtype = int
+
+
+class MulMixin(ArithmeticsMixin):
+    iop = operator.imul       # x = iop(x, y) is x += y
+    op = operator.mul
+
+
+class TestMulDouble(MulMixin, TestCase):
+    dtype = float
+
+
+class TestMulFloat(MulMixin, TestCase):
+    dtype = np.float32
+
+
+class TestMulPyInt(MulMixin, TestCase):
     dtype = int
 
 

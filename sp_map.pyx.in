@@ -70,7 +70,7 @@ cdef extern from "elementwise_ops.h" namespace "sparray":
     T linear_unary_op[T](T, T, T)
     T power_unary_op[T](T, T, T)
     T linear_binary_op[T](T, T, T, T)
-
+    T mul_binary_op[T](T, T, T, T)
 
 cdef index_type index_from_tuple(tuple tpl):
     # conversion helper: 2D only.
@@ -314,6 +314,53 @@ cdef class MapArray:
         else:
             # how come?
             raise RuntimeError("__add__ : never be here ", self, other)
+
+
+    def __imul__(MapArray self not None, other):
+
+        if isinstance(other, np.ndarray): 
+            # hand over to __mul__ for densification
+            return NotImplemented
+
+        cdef int typenum = self.dtype.num
+        if isinstance(other, MapArray):
+            {{for NUM, CT in zip(TNUMS, CTYPES)}}
+            if typenum == {{NUM}}:
+                self.p.{{CT}}_ptr.inplace_binary_op(mul_binary_op[{{CT}}],
+                                                    (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>0)  # BUG: mixed-type ops
+                return self
+            {{endfor}}
+            raise ValueError("imul(MapArray): unhandled dtype %s." % self.dtype)
+
+        # it must be a scalar then
+        {{for NUM, CT in zip(TNUMS, CTYPES)}}
+        cdef {{CT}} {{CT}}_other
+        if typenum == {{NUM}}:
+            try:
+                # try casting to a POD: double_other = <double?>(other) etc (Cython syntax)
+                {{CT}}_other = <{{CT}}?>(other)
+                self.p.{{CT}}_ptr.inplace_unary_op(linear_unary_op[{{CT}}], {{CT}}_other, <{{CT}}>0,)
+                return self
+            except TypeError:
+                # strings, lists and other animals
+                return NotImplemented
+        {{endfor}}
+        raise ValueError("imul(scalar): unhandled dtype %s." % self.dtype)
+
+
+    def __mul__(self, other):
+        if isinstance(self, MapArray):
+            if isinstance(other, np.ndarray):
+                # Densify and return dense result
+                return self.todense() * other
+            else:
+                newobj = self.copy()
+                return newobj.__imul__(other)
+        elif isinstance(other, MapArray):
+            return other.__mul__(self)
+        else:
+            # how come?
+            raise RuntimeError("__mul__ : never be here ", self, other)
 
 
 cnp.import_array()
