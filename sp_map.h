@@ -160,7 +160,7 @@ map_array_t<T, I, num_dim>::inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
         }
     }
 
-    // run other the nonzero elements of *this. This is O(n1 * log(n2))
+    // run over the nonzero elements of *this. This is O(n1 * log(n2))
     typename map_type::iterator it = data_.begin();
     for(; it != data_.end(); ++it){
         index_type idx = it->first;
@@ -177,7 +177,7 @@ map_array_t<T, I, num_dim>::inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
             index_type idx = it_other->first;
             it = data_.find(idx);
             if (it == data_.end()){
-                data_[idx] = (*fptr)(fill_value_, it_other->second, a, b);
+                it->second = (*fptr)(fill_value_, it_other->second, a, b);
             }
         }
     }
