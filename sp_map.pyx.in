@@ -10,11 +10,17 @@
 #  6. int types between C++ and Cy, esp int, npy_intp etc
 #  7. slices
 #
+#  TYPES:
+#  8. specify casting rules
+#  9. less copying in casting in binops (MapArray + MapArray)
+#  10. binops: func ptrs in inner loops are likely not good for inlining?
+#  11. add more tests for mixed binops
+#  12. add tests with NAN and INF, where supported
+#
 #  7. construct from_dense
-#  8. add more binops (__mul__)
+#  8. add more binops (__mul__) & make them cast a la __add__
 #  9. add matmul and operator @
 #  10. add more Py types
-#  11. type casts: float + int
 #  12. to_csr interop
 #
 #  Minor quibbles:
@@ -43,7 +49,7 @@ cdef extern from "sp_map.h" namespace "sparray":
     cdef cppclass map_array_t[T]:
         map_array_t() except +
         map_array_t(const map_array_t&) except +
-        void copy_from_other(const map_array_t*) except +
+        void copy_from[S](const map_array_t[S]*) except +
 
         size_t ndim() const
         index_type shape() const
@@ -83,7 +89,7 @@ cdef index_type index_from_tuple(tuple tpl):
 {{py: 
 CTYPES = ['long', 'float', 'double']
 TNUMS = ['cnp.NPY_LONG', 'cnp.NPY_FLOAT', 'cnp.NPY_DOUBLE']
-CMDS = ['if'] + ['elif']*(len(TNUMS) - 1)
+CONDS = ['if'] + ['elif']*(len(TNUMS) - 1)
 }}
 
 
@@ -110,12 +116,12 @@ cdef class MapArray:
         # allocate memory on the correct type pointer
         cdef int typenum = self.dtype.num
 
-        {{for NUM, CT, CMD in zip(TNUMS, CTYPES, CMDS)}}
-        {{CMD}} typenum == {{NUM}}:
+        {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} typenum == {{NUM}}:
             self.p.{{CT}}_ptr = new map_array_t[{{CT}}]()
         {{endfor}}
         else:
-            raise ValueError("dtype %s  not supported." % dtype)
+            raise TypeError("dtype %s  not supported." % dtype)
 
         # handle shape
         try:
@@ -128,12 +134,15 @@ cdef class MapArray:
 
     def __dealloc__(self):
         cdef int typenum = self.dtype.num
-        {{for NUM, CT, CMD in zip(TNUMS, CTYPES, CMDS)}}
-        {{CMD}} typenum == {{NUM}}:
+        {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} typenum == {{NUM}}:
             del self.p.{{CT}}_ptr
         {{endfor}}
-        else:
-            raise ValueError("Panic! Unsupported dtype %s  in dtor." % self.dtype)
+        # NB: this if-then-else is deliberately not closed off with an error.
+        # The reason is that if a dtype lookup fails in __cinit__, it raises
+        # a TypeError, and then __dealloc__ is called by Cython anyway.
+        # The result is a spurious message from __dealloc__ saying that
+        # the error was ignored.
 
     #### Public interface accessors #####
 
@@ -144,8 +153,8 @@ cdef class MapArray:
     property ndim:
         def __get__(self):
             cdef int typenum = self.dtype.num
-            {{for NUM, C, CMD in zip(TNUMS, CTYPES, CMDS)}}
-            {{CMD}} typenum == {{NUM}}:
+            {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
+            {{IF}} typenum == {{NUM}}:
                 return self.p.{{C}}_ptr.ndim()
             {{endfor}}
             else:
@@ -154,8 +163,8 @@ cdef class MapArray:
     property fill_value:
         def __get__(self):
             cdef int typenum = self.dtype.num
-            {{for NUM, C, CMD in zip(TNUMS, CTYPES, CMDS)}}
-            {{CMD}} typenum == {{NUM}}:
+            {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
+            {{IF}} typenum == {{NUM}}:
                 return self.p.{{C}}_ptr.fill_value()
             {{endfor}}
             else:
@@ -163,8 +172,8 @@ cdef class MapArray:
 
         def __set__(self, value):
             cdef int typenum = self.dtype.num
-            {{for NUM, C, CMD in zip(TNUMS, CTYPES, CMDS)}}
-            {{CMD}} typenum == {{NUM}}:
+            {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
+            {{IF}} typenum == {{NUM}}:
                 self.p.{{C}}_ptr.set_fill_value(value)
             {{endfor}}
             else:
@@ -174,8 +183,8 @@ cdef class MapArray:
         def __get__(self):
             cdef index_type sh
             cdef int typenum = self.dtype.num
-            {{for NUM, C, CMD in zip(TNUMS, CTYPES, CMDS)}}
-            {{CMD}} typenum == {{NUM}}:
+            {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
+            {{IF}} typenum == {{NUM}}:
                 sh = self.p.{{C}}_ptr.shape()
                 return sh[0], sh[1]           # TODO: ndim != 2
             {{endfor}}
@@ -192,8 +201,8 @@ cdef class MapArray:
 
         cdef index_type shp = index_from_tuple(shape)
         cdef int typenum = self.dtype.num
-        {{for NUM, C, CMD in zip(TNUMS, CTYPES, CMDS)}}
-        {{CMD}} typenum == {{NUM}}:
+        {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} typenum == {{NUM}}:
             self.p.{{C}}_ptr.set_shape(shp)
         {{endfor}}
         else:
@@ -201,24 +210,34 @@ cdef class MapArray:
 
     def count_nonzero(self):
         cdef int typenum = self.dtype.num
-        {{for NUM, C, CMD in zip(TNUMS, CTYPES, CMDS)}}
-        {{CMD}} typenum == {{NUM}}:
+        {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} typenum == {{NUM}}:
             return self.p.{{C}}_ptr.count_nonzero()
         {{endfor}}
         raise TypeError("count_nonzero: dtype = %s unhandled." % self.dtype)
 
 
-    def copy(self):
-        newobj = MapArray(self.dtype)
-        newobj.dtype = self.dtype
+    def copy(self, dtype=None):
+        if dtype is None:
+            dtype = self.dtype
+        newobj = MapArray(dtype=dtype)
 
-        cdef int typenum = self.dtype.num
-        {{for NUM, CT, CMD in zip(TNUMS, CTYPES, CMDS)}}
-        {{CMD}} typenum == {{NUM}}:
-            newobj.p.{{CT}}_ptr.copy_from_other(self.p.{{CT}}_ptr)
-            return newobj
+        cdef int typenum_src = self.dtype.num
+        cdef int typenum_dest = dtype.num
+        {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} typenum_src == {{NUM}}:
+            # found self.dtype, on to the dest dtype now
+            {{for NUM1, CT1, IF1 in zip(TNUMS, CTYPES, CONDS)}}
+            {{IF1}} typenum_dest == {{NUM1}}:
+                newobj.p.{{CT1}}_ptr.copy_from[{{CT}}](self.p.{{CT}}_ptr)
+                return newobj
+            {{endfor}}
         {{endfor}}
         raise TypeError("copy: never be here. dtype = " % self.dtype)
+
+    def astype(self, dtype):
+        # Syntactic sugar: .copy() preserves dtype, .astype changes it.
+        return self.copy(dtype)
 
     def todense(self):
         cdef:
@@ -256,8 +275,8 @@ cdef class MapArray:
         cdef index_type idx = index_from_tuple(tpl)
 
         cdef int typenum = self.dtype.num
-        {{for NUM, CT, CMD in zip(TNUMS, CTYPES, CMDS)}}
-        {{CMD}} typenum == {{NUM}}:
+        {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} typenum == {{NUM}}:
             self.p.{{CT}}_ptr.set_one(idx, value)
         {{endfor}}
         else:
@@ -266,7 +285,6 @@ cdef class MapArray:
     ###### Arithmetics #######
 
     # TODO: 
-    #        2. type casting 
     #        3. add more arithm ops: sub, mul, div, l/r shifts, mod etc
 
     def __iadd__(MapArray self not None, other):
@@ -276,16 +294,44 @@ cdef class MapArray:
             return NotImplemented
 
         cdef int typenum = self.dtype.num
+        cdef int other_typenum
         if isinstance(other, MapArray):
+
+            # figure out dtypes, copy if necessary
+            other_typenum = other.dtype.num
+            if typenum != other_typenum:
+                res_type = np.promote_types(self.dtype, other.dtype)
+                if res_type.num != typenum:
+                    # upcast self and operate on the copy
+                    newobj = self.astype(res_type)
+                    return newobj.__iadd__(other)
+
+                # by this stage, self.dtype == res_type
+                if typenum != other_typenum:
+                    # upcast other
+                    other = other.astype(res_type)
+
+            # dispatch
             {{for NUM, CT in zip(TNUMS, CTYPES)}}
             if typenum == {{NUM}}:
                 self.p.{{CT}}_ptr.inplace_binary_op(linear_binary_op[{{CT}}],
-                                                    (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>1)  # BUG: mixed-type ops
+                                                    (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>1)
                 return self
             {{endfor}}
-            raise ValueError("iadd(MapArray): unhandled dtype %s." % self.dtype)
+            return NotImplemented
 
         # it must be a scalar then
+        res_type = np.promote_types(self.dtype, np.asarray(other).dtype)
+        if res_type.num != typenum:
+            # upcast self and operate on the copy
+            try:
+                newobj = self.astype(res_type)
+                return newobj.__iadd__(other)
+            except TypeError:
+                # strings, lists and other unsupported dtypes
+                return NotImplemented
+
+        # by this stage, self.dtype is wide enough; maybe need to cast a scalar
         {{for NUM, CT in zip(TNUMS, CTYPES)}}
         cdef {{CT}} {{CT}}_other
         if typenum == {{NUM}}:
@@ -298,8 +344,7 @@ cdef class MapArray:
                 # strings, lists and other animals
                 return NotImplemented
         {{endfor}}
-        raise ValueError("iadd(scalar): unhandled dtype %s." % self.dtype)
-
+        return NotImplemented
 
     def __add__(self, other):
         if isinstance(self, MapArray):

@@ -83,6 +83,7 @@ class BasicMixin(object):
         ma1 = ma.copy()
         ma1[2, 4] = 3.
 
+        assert_equal(ma1.dtype, self.dtype)
         assert_equal(ma1.shape, (3, 5))
         assert_allclose(ma1.todense(),
                         np.array([[0, 0, 0, 0, 0],
@@ -269,6 +270,51 @@ class TestMulFloat(MulMixin, TestCase):
 
 class TestMulPyInt(MulMixin, TestCase):
     dtype = int
+
+
+class TestCasting(TestCase):
+    m = MapArray(dtype=float)
+    m[1, 1] = 10.0
+
+    im = MapArray(dtype=int)
+    im[1, 1] = -1.
+
+
+    def test_double_int(self):
+        # double + int becomes double
+        res = self.m + self.im
+        assert_equal(res.dtype, self.m.dtype)
+        assert_allclose(res.todense(), np.array([[0., 0.],
+                                                 [0., 9.]]), atol=1e-15)
+
+    def test_int_double(self):
+        # int + double becomes double
+        res = self.im + self.m
+        assert_equal(res.dtype, self.m.dtype)
+        assert_allclose(res.todense(), np.array([[0., 0.],
+                                                 [0., 9.]]), atol=1e-15)
+
+    def test_inplace_double_int(self):
+        m = self.m.copy()
+        im = self.im.copy()
+
+        m += im
+
+        assert_equal(m.dtype, self.m.dtype)
+        assert_allclose(m.todense(), np.array([[0., 0.],
+                                               [0., 9.]]), atol=1e-15)
+
+    def test_scalar_upcast(self):
+        # double scalar + int array: upcasts the array
+        im = self.im.copy()
+
+        m = im + 1.2
+        assert_equal(m.dtype, np.dtype(float))
+        assert_allclose(m.todense(), im.todense() + 1.2, atol=1e-15)
+
+        m = 1.2 + im
+        assert_equal(m.dtype, np.dtype(float))
+        assert_allclose(m.todense(), im.todense() + 1.2, atol=1e-15)
 
 
 if __name__ == "__main__":

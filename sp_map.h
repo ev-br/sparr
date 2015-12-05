@@ -20,7 +20,7 @@ struct map_array_t
 
     map_array_t(const T& fill_value = 0);
     map_array_t(const map_array_t& other);
-    void copy_from_other(const map_array_t *p_other);
+    template<typename S> void copy_from(const map_array_t<S, I, num_dim> *src);
 
     size_t ndim() const { return num_dim; }
     index_type shape() const { return shape_; }
@@ -78,25 +78,30 @@ inline map_array_t<T, I, num_dim>::map_array_t(const T& fill_value)
 template<typename T, typename I, size_t num_dim>
 inline map_array_t<T, I, num_dim>::map_array_t(const map_array_t<T, I, num_dim>& other)
 {
-    copy_from_other(&other);
+    copy_from(&other);
 }
 
 // NB This could have been const map_array_t<...>&, but Cython wrappers
 // operate on pointers anyway.
 template<typename T, typename I, size_t num_dim>
-inline void 
-map_array_t<T, I, num_dim>::copy_from_other(const map_array_t<T, I, num_dim> *p_other)
+template<typename S>
+inline void
+map_array_t<T, I, num_dim>::copy_from(const map_array_t<S, I, num_dim> *src)
 {
-    if(!p_other)
+    if(!src)
         throw std::logic_error("copy from NULL");
-    if(p_other == this)
-        throw std::logic_error("copy from self.");
 
-    data_.insert(p_other->begin_nonzero(), p_other->end_nonzero());
-    for(size_t j=0; j < num_dim; ++j){
-        shape_[j] = p_other->shape()[j];
+    typename map_array_t<S, I, num_dim>::iter_nonzero_type it = src->begin_nonzero();
+
+    for(; it != src->end_nonzero(); ++it){
+        data_[it->first] = static_cast<T>(it->second);
     }
-    fill_value_ = p_other->fill_value();
+
+    for(size_t j=0; j < num_dim; ++j){
+        shape_[j] = src->shape()[j];
+    }
+
+    fill_value_ = static_cast<T>(src->fill_value());
 }
 
 
