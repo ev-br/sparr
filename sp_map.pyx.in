@@ -360,7 +360,6 @@ cdef class MapArray:
             # how come?
             raise RuntimeError("__add__ : never be here ", self, other)
 
-
     def __imul__(MapArray self not None, other):
 
         if isinstance(other, np.ndarray): 
@@ -368,16 +367,44 @@ cdef class MapArray:
             return NotImplemented
 
         cdef int typenum = self.dtype.num
+        cdef int other_typenum
         if isinstance(other, MapArray):
+
+            # figure out dtypes, copy if necessary
+            other_typenum = other.dtype.num
+            if typenum != other_typenum:
+                res_type = np.promote_types(self.dtype, other.dtype)
+                if res_type.num != typenum:
+                    # upcast self and operate on the copy
+                    newobj = self.astype(res_type)
+                    return newobj.__imul__(other)
+
+                # by this stage, self.dtype == res_type
+                if typenum != other_typenum:
+                    # upcast other
+                    other = other.astype(res_type)
+
+            # dispatch
             {{for NUM, CT in zip(TNUMS, CTYPES)}}
             if typenum == {{NUM}}:
                 self.p.{{CT}}_ptr.inplace_binary_op(mul_binary_op[{{CT}}],
                                                     (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>0)  # BUG: mixed-type ops
                 return self
             {{endfor}}
-            raise ValueError("imul(MapArray): unhandled dtype %s." % self.dtype)
+            return NotImplemented
 
         # it must be a scalar then
+        res_type = np.promote_types(self.dtype, np.asarray(other).dtype)
+        if res_type.num != typenum:
+            # upcast self and operate on the copy
+            try:
+                newobj = self.astype(res_type)
+                return newobj.__imul__(other)
+            except TypeError:
+                # strings, lists and other unsupported dtypes
+                return NotImplemented
+
+        # by this stage, self.dtype is wide enough; maybe need to cast a scalar
         {{for NUM, CT in zip(TNUMS, CTYPES)}}
         cdef {{CT}} {{CT}}_other
         if typenum == {{NUM}}:
@@ -390,7 +417,7 @@ cdef class MapArray:
                 # strings, lists and other animals
                 return NotImplemented
         {{endfor}}
-        raise ValueError("imul(scalar): unhandled dtype %s." % self.dtype)
+        return NotImplemented
 
 
     def __mul__(self, other):
