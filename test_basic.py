@@ -21,11 +21,7 @@ class BasicMixin(object):
         assert_equal(ma.todense().shape, (3, 4))
 
         ma = MapArray(shape=(3, 4), fill_value=42, dtype=self.dtype)
-        assert_equal(ma.fill_value, 42)
-
-        ma = MapArray((3, 4), 42, dtype=self.dtype)
-        assert_equal(ma.shape, (3, 4))
-        assert_equal(ma.fill_value, 42)
+        assert_equal(ma.fill_value, self.dtype(42))
 
         with assert_raises(TypeError):
             MapArray(unknown='arg')
@@ -33,9 +29,14 @@ class BasicMixin(object):
     def test_fill_value_mutable(self):
         ma = MapArray(dtype=self.dtype)
         ma.fill_value = -1.
-        assert_equal(ma.fill_value, -1)
-        with assert_raises(TypeError):
+        assert_equal(ma.fill_value, self.dtype(-1))
+
+        if self.dtype != np.dtype(bool):
+            with assert_raises(TypeError):
+                ma.fill_value = 'lalala'
+        else:
             ma.fill_value = 'lalala'
+            assert_equal(ma.fill_value, True)
 
     def test_basic_insert(self):
         ma = MapArray(dtype=self.dtype)
@@ -45,7 +46,7 @@ class BasicMixin(object):
         assert_equal(ma.count_nonzero(), 1)
         assert_allclose(ma.todense(),
                         np.array([[0, 0],
-                                  [0, -1]]), atol=1e-15)
+                                  [0, -1]], dtype=self.dtype), atol=1e-15)
 
         ma[2, 3] = 8
         assert_equal(ma.ndim, 2)
@@ -54,7 +55,7 @@ class BasicMixin(object):
         assert_allclose(ma.todense(),
                         np.array([[0, 0, 0, 0],
                                   [0, -1, 0, 0],
-                                  [0, 0, 0, 8]]), atol=1e-15)
+                                  [0, 0, 0, 8]], dtype=self.dtype), atol=1e-15)
 
     def test_todense_fillvalue(self):
         ma = MapArray(dtype=self.dtype)
@@ -65,7 +66,7 @@ class BasicMixin(object):
         assert_allclose(ma.todense(),
                         np.array([[1, 1, 1, 1],
                                   [1, -1, 1, 1],
-                                  [1, 1, 1, 8]]), atol=1e-15)
+                                  [1, 1, 1, 8]], dtype=self.dtype), atol=1e-15)
 
     @skipif(True, '32 bit indices')
     def test_int_overflow(self):
@@ -88,11 +89,11 @@ class BasicMixin(object):
         assert_allclose(ma1.todense(),
                         np.array([[0, 0, 0, 0, 0],
                                   [0, 1, 0, 0, 0], 
-                                  [0, 0, 0, 0, 3]]), atol=1e-15)
+                                  [0, 0, 0, 0, 3]], dtype=self.dtype), atol=1e-15)
         assert_equal(ma.shape, (2, 2))
         assert_allclose(ma.todense(),
                         np.array([[0, 0],
-                                  [0, 1]]), atol=1e-15)
+                                  [0, 1]], dtype=self.dtype), atol=1e-15)
 
 
 class TestBasicDouble(BasicMixin, TestCase):
@@ -105,6 +106,12 @@ class TestBasicFloat(BasicMixin, TestCase):
 
 class TestBasicPyInt(BasicMixin, TestCase):
     dtype = int
+
+
+class TestBasicPyBool(BasicMixin, TestCase):
+    dtype = bool
+
+
 
 
 class ArithmeticsMixin(object):

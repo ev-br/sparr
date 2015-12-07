@@ -30,7 +30,7 @@
 
 import numpy as np
 cimport numpy as cnp
-from numpy cimport PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE, npy_intp
+from numpy cimport PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE, npy_intp, npy_bool
 
 
 cdef extern from "fixed_cap.h" namespace "sparray":
@@ -78,6 +78,7 @@ cdef extern from "elementwise_ops.h" namespace "sparray":
     T linear_binary_op[T](T, T, T, T)
     T mul_binary_op[T](T, T, T, T)
 
+
 cdef index_type index_from_tuple(tuple tpl):
     # conversion helper: 2D only.
     cdef index_type idx
@@ -86,9 +87,15 @@ cdef index_type index_from_tuple(tuple tpl):
     return idx
 
 
+cdef object convert_io(object value, int typenum):
+    if typenum == cnp.NPY_BOOL:
+        return (value != 0)
+    return value
+
+
 {{py: 
-CTYPES = ['long', 'float', 'double']
-TNUMS = ['cnp.NPY_LONG', 'cnp.NPY_FLOAT', 'cnp.NPY_DOUBLE']
+CTYPES = ['npy_bool', 'long', 'float', 'double']
+TNUMS = ['cnp.NPY_BOOL', 'cnp.NPY_LONG', 'cnp.NPY_FLOAT', 'cnp.NPY_DOUBLE']
 CONDS = ['if'] + ['elif']*(len(TNUMS) - 1)
 }}
 
@@ -165,7 +172,7 @@ cdef class MapArray:
             cdef int typenum = self.dtype.num
             {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
             {{IF}} typenum == {{NUM}}:
-                return self.p.{{C}}_ptr.fill_value()
+                return convert_io(self.p.{{C}}_ptr.fill_value(), typenum)
             {{endfor}}
             else:
                 raise TypeError("fill_value: dtype = %s unhandled." % self.dtype)
@@ -174,7 +181,7 @@ cdef class MapArray:
             cdef int typenum = self.dtype.num
             {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
             {{IF}} typenum == {{NUM}}:
-                self.p.{{C}}_ptr.set_fill_value(value)
+                self.p.{{C}}_ptr.set_fill_value(convert_io(value, typenum))
             {{endfor}}
             else:
                 raise TypeError("fill_value: dtype = %s unhandled." % self.dtype)
@@ -223,7 +230,7 @@ cdef class MapArray:
         newobj = MapArray(dtype=dtype)
 
         cdef int typenum_src = self.dtype.num
-        cdef int typenum_dest = dtype.num
+        cdef int typenum_dest = newobj.dtype.num
         {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
         {{IF}} typenum_src == {{NUM}}:
             # found self.dtype, on to the dest dtype now
@@ -267,7 +274,7 @@ cdef class MapArray:
         cdef int typenum = self.dtype.num
         {{for NUM, CT in zip(TNUMS, CTYPES)}}
         if typenum == {{NUM}}:
-            return self.p.{{CT}}_ptr.get_one(idx)
+            return convert_io(self.p.{{CT}}_ptr.get_one(idx), typenum)
         {{endfor}}
         raise TypeError("__getitem__: dtype = %s not understood." % self.dtype)
 
@@ -277,7 +284,7 @@ cdef class MapArray:
         cdef int typenum = self.dtype.num
         {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
         {{IF}} typenum == {{NUM}}:
-            self.p.{{CT}}_ptr.set_one(idx, value)
+            self.p.{{CT}}_ptr.set_one(idx, convert_io(value, typenum))
         {{endfor}}
         else:
             raise TypeError("__setitem__: dtype = %s not understood." % self.dtype)
@@ -434,5 +441,33 @@ cdef class MapArray:
             # how come?
             raise RuntimeError("__mul__ : never be here ", self, other)
 
+    ########### Booleans ########################
+
+    def __richcmp__(self, other, int op):
+        if not isinstance(self, MapArray):
+            # __richcmp__ seems to sort out reversed ops ( $1 < m$ -> $m >= 1$ )
+            # automagically
+            raise ValueError("__richcmp__: %s %s %s" % (self, other, op))
+
+        if isinstance(other, np.ndarray):
+            # XXX <object>ndarray must have __richcmp__ or something
+            if op == 0:
+                return self.todense() < other
+            elif op == 1:
+                return self.todense() <= other
+            elif op == 2:
+                return self.todense() == other
+            elif op == 3:
+                return self.todense() != other
+            elif op == 4:
+                return self.todense() > other
+            elif op == 5:
+                return self.todense() >= other
+            else:
+                raise ValueError("dense cmp: op = ." % op)
+
+        if isinstance(other, MapArray):
+            result = MapArray(dtype=bool, shape=self.shape, fill_value=False)
+        raise NotImplementedError
 
 cnp.import_array()
