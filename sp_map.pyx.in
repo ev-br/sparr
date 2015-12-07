@@ -92,6 +92,10 @@ cdef object convert_io(object value, int typenum):
         return (value != 0)
     return value
 
+def get_dtype(int typenum):
+    # per https://mail.scipy.org/pipermail/numpy-discussion/2013-October/068002.html
+    return np.dtype(cnp.PyArray_TypeObjectFromType(typenum))
+
 
 {{py: 
 CTYPES = ['npy_bool', 'long', 'float', 'double']
@@ -108,7 +112,7 @@ cdef union union_t:
 
 cdef class MapArray:
     cdef union_t p
-    cdef object dtype
+    cdef int typenum
 
     __array_priority__ = 10.1     # equal to that of sparse matrices
 
@@ -118,13 +122,12 @@ cdef class MapArray:
     def __cinit__(self, shape=None, fill_value=0, dtype=float, *args, **kwds):
 
         # this seems to convert float etc to numpy dtypes
-        self.dtype = np.dtype(dtype)
+        dtype = np.dtype(dtype)
+        self.typenum = dtype.num
 
         # allocate memory on the correct type pointer
-        cdef int typenum = self.dtype.num
-
         {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
-        {{IF}} typenum == {{NUM}}:
+        {{IF}} self.typenum == {{NUM}}:
             self.p.{{CT}}_ptr = new map_array_t[{{CT}}]()
         {{endfor}}
         else:
@@ -140,9 +143,8 @@ cdef class MapArray:
         self.fill_value = fill_value
 
     def __dealloc__(self):
-        cdef int typenum = self.dtype.num
         {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
-        {{IF}} typenum == {{NUM}}:
+        {{IF}} self.typenum == {{NUM}}:
             del self.p.{{CT}}_ptr
         {{endfor}}
         # NB: this if-then-else is deliberately not closed off with an error.
@@ -155,13 +157,12 @@ cdef class MapArray:
 
     property dtype:
         def __get__(self):
-            return self.dtype
+            return get_dtype(self.typenum)
 
     property ndim:
         def __get__(self):
-            cdef int typenum = self.dtype.num
             {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
-            {{IF}} typenum == {{NUM}}:
+            {{IF}} self.typenum == {{NUM}}:
                 return self.p.{{C}}_ptr.ndim()
             {{endfor}}
             else:
@@ -169,19 +170,17 @@ cdef class MapArray:
 
     property fill_value:
         def __get__(self):
-            cdef int typenum = self.dtype.num
             {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
-            {{IF}} typenum == {{NUM}}:
-                return convert_io(self.p.{{C}}_ptr.fill_value(), typenum)
+            {{IF}} self.typenum == {{NUM}}:
+                return convert_io(self.p.{{C}}_ptr.fill_value(), self.typenum)
             {{endfor}}
             else:
                 raise TypeError("fill_value: dtype = %s unhandled." % self.dtype)
 
         def __set__(self, value):
-            cdef int typenum = self.dtype.num
             {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
-            {{IF}} typenum == {{NUM}}:
-                self.p.{{C}}_ptr.set_fill_value(convert_io(value, typenum))
+            {{IF}} self.typenum == {{NUM}}:
+                self.p.{{C}}_ptr.set_fill_value(convert_io(value, self.typenum))
             {{endfor}}
             else:
                 raise TypeError("fill_value: dtype = %s unhandled." % self.dtype)
@@ -189,9 +188,8 @@ cdef class MapArray:
     property shape:
         def __get__(self):
             cdef index_type sh
-            cdef int typenum = self.dtype.num
             {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
-            {{IF}} typenum == {{NUM}}:
+            {{IF}} self.typenum == {{NUM}}:
                 sh = self.p.{{C}}_ptr.shape()
                 return sh[0], sh[1]           # TODO: ndim != 2
             {{endfor}}
@@ -207,18 +205,16 @@ cdef class MapArray:
             raise TypeError("Shape %s not undestood." % str(shape))
 
         cdef index_type shp = index_from_tuple(shape)
-        cdef int typenum = self.dtype.num
         {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
-        {{IF}} typenum == {{NUM}}:
+        {{IF}} self.typenum == {{NUM}}:
             self.p.{{C}}_ptr.set_shape(shp)
         {{endfor}}
         else:
             raise TypeError("shape setter: dtype = %s unhandled." % self.dtype)
 
     def count_nonzero(self):
-        cdef int typenum = self.dtype.num
         {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
-        {{IF}} typenum == {{NUM}}:
+        {{IF}} self.typenum == {{NUM}}:
             return self.p.{{C}}_ptr.count_nonzero()
         {{endfor}}
         raise TypeError("count_nonzero: dtype = %s unhandled." % self.dtype)
@@ -229,8 +225,8 @@ cdef class MapArray:
             dtype = self.dtype
         newobj = MapArray(dtype=dtype)
 
-        cdef int typenum_src = self.dtype.num
-        cdef int typenum_dest = newobj.dtype.num
+        cdef int typenum_src = self.typenum
+        cdef int typenum_dest = newobj.typenum
         {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
         {{IF}} typenum_src == {{NUM}}:
             # found self.dtype, on to the dest dtype now
@@ -247,14 +243,11 @@ cdef class MapArray:
         return self.copy(dtype)
 
     def todense(self):
-        cdef:
-            int nd
-            cnp.ndarray a
-            int typenum = self.dtype.num
+        cdef int nd
+        cdef cnp.ndarray a
 
         {{for NUM, CT in zip(TNUMS, CTYPES)}}
-        if typenum == {{NUM}}:
-
+        if self.typenum == {{NUM}}:
             nd = <int>self.p.{{CT}}_ptr.ndim()
             a = PyArray_SimpleNew(nd,
                                   <npy_intp*>self.p.{{CT}}_ptr.shape().elem_,
@@ -271,20 +264,18 @@ cdef class MapArray:
         # 2D is hardcoded; no slicing; no input validation
         cdef index_type idx = index_from_tuple(tpl)
 
-        cdef int typenum = self.dtype.num
         {{for NUM, CT in zip(TNUMS, CTYPES)}}
-        if typenum == {{NUM}}:
-            return convert_io(self.p.{{CT}}_ptr.get_one(idx), typenum)
+        if self.typenum == {{NUM}}:
+            return convert_io(self.p.{{CT}}_ptr.get_one(idx), self.typenum)
         {{endfor}}
         raise TypeError("__getitem__: dtype = %s not understood." % self.dtype)
 
     def __setitem__(self, tpl, value):
         cdef index_type idx = index_from_tuple(tpl)
 
-        cdef int typenum = self.dtype.num
         {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
-        {{IF}} typenum == {{NUM}}:
-            self.p.{{CT}}_ptr.set_one(idx, convert_io(value, typenum))
+        {{IF}} self.typenum == {{NUM}}:
+            self.p.{{CT}}_ptr.set_one(idx, convert_io(value, self.typenum))
         {{endfor}}
         else:
             raise TypeError("__setitem__: dtype = %s not understood." % self.dtype)
@@ -300,27 +291,26 @@ cdef class MapArray:
             # hand over to __add__ for densification
             return NotImplemented
 
-        cdef int typenum = self.dtype.num
         cdef int other_typenum
         if isinstance(other, MapArray):
 
             # figure out dtypes, copy if necessary
             other_typenum = other.dtype.num
-            if typenum != other_typenum:
+            if self.typenum != other_typenum:
                 res_type = np.promote_types(self.dtype, other.dtype)
-                if res_type.num != typenum:
+                if res_type.num != self.typenum:
                     # upcast self and operate on the copy
                     newobj = self.astype(res_type)
                     return newobj.__iadd__(other)
 
                 # by this stage, self.dtype == res_type
-                if typenum != other_typenum:
+                if self.typenum != other_typenum:
                     # upcast other
                     other = other.astype(res_type)
 
             # dispatch
             {{for NUM, CT in zip(TNUMS, CTYPES)}}
-            if typenum == {{NUM}}:
+            if self.typenum == {{NUM}}:
                 self.p.{{CT}}_ptr.inplace_binary_op(linear_binary_op[{{CT}}],
                                                     (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>1)
                 return self
@@ -329,7 +319,7 @@ cdef class MapArray:
 
         # it must be a scalar then
         res_type = np.promote_types(self.dtype, np.asarray(other).dtype)
-        if res_type.num != typenum:
+        if res_type.num != self.typenum:
             # upcast self and operate on the copy
             try:
                 newobj = self.astype(res_type)
@@ -341,7 +331,7 @@ cdef class MapArray:
         # by this stage, self.dtype is wide enough; maybe need to cast a scalar
         {{for NUM, CT in zip(TNUMS, CTYPES)}}
         cdef {{CT}} {{CT}}_other
-        if typenum == {{NUM}}:
+        if self.typenum == {{NUM}}:
             try:
                 # try casting to a POD: double_other = <double?>(other) etc (Cython syntax)
                 {{CT}}_other = <{{CT}}?>(other)
@@ -373,27 +363,26 @@ cdef class MapArray:
             # hand over to __mul__ for densification
             return NotImplemented
 
-        cdef int typenum = self.dtype.num
         cdef int other_typenum
         if isinstance(other, MapArray):
 
             # figure out dtypes, copy if necessary
             other_typenum = other.dtype.num
-            if typenum != other_typenum:
+            if self.typenum != other_typenum:
                 res_type = np.promote_types(self.dtype, other.dtype)
-                if res_type.num != typenum:
+                if res_type.num != self.typenum:
                     # upcast self and operate on the copy
                     newobj = self.astype(res_type)
                     return newobj.__imul__(other)
 
                 # by this stage, self.dtype == res_type
-                if typenum != other_typenum:
+                if self.typenum != other_typenum:
                     # upcast other
                     other = other.astype(res_type)
 
             # dispatch
             {{for NUM, CT in zip(TNUMS, CTYPES)}}
-            if typenum == {{NUM}}:
+            if self.typenum == {{NUM}}:
                 self.p.{{CT}}_ptr.inplace_binary_op(mul_binary_op[{{CT}}],
                                                     (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>0)  # BUG: mixed-type ops
                 return self
@@ -402,7 +391,7 @@ cdef class MapArray:
 
         # it must be a scalar then
         res_type = np.promote_types(self.dtype, np.asarray(other).dtype)
-        if res_type.num != typenum:
+        if res_type.num != self.typenum:
             # upcast self and operate on the copy
             try:
                 newobj = self.astype(res_type)
@@ -414,7 +403,7 @@ cdef class MapArray:
         # by this stage, self.dtype is wide enough; maybe need to cast a scalar
         {{for NUM, CT in zip(TNUMS, CTYPES)}}
         cdef {{CT}} {{CT}}_other
-        if typenum == {{NUM}}:
+        if self.typenum == {{NUM}}:
             try:
                 # try casting to a POD: double_other = <double?>(other) etc (Cython syntax)
                 {{CT}}_other = <{{CT}}?>(other)
