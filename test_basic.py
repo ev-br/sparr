@@ -115,8 +115,6 @@ class TestBasicPyBool(BasicMixin, TestCase):
     dtype = bool
 
 
-
-
 class ArithmeticsMixin(object):
 
     iop = operator.iadd       # x = iop(x, y) is x += y
@@ -270,7 +268,7 @@ class TestArithmPyInt(ArithmeticsMixin, TestCase):
 
 
 class MulMixin(ArithmeticsMixin):
-    iop = operator.imul       # x = iop(x, y) is x += y
+    iop = operator.imul       # x = iop(x, y) is x *= y
     op = operator.mul
 
 
@@ -292,7 +290,6 @@ class TestCasting(TestCase):
 
     im = MapArray(dtype=int)
     im[1, 1] = -1.
-
 
     def test_double_int(self):
         # double + int becomes double
