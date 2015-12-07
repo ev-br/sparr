@@ -26,6 +26,9 @@ class BasicMixin(object):
         with assert_raises(TypeError):
             MapArray(unknown='arg')
 
+        with assert_raises(TypeError):
+            MapArray(dtype=42)
+
     def test_fill_value_mutable(self):
         ma = MapArray(dtype=self.dtype)
         ma.fill_value = -1.

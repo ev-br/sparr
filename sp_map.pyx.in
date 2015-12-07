@@ -88,6 +88,7 @@ cdef index_type index_from_tuple(tuple tpl):
 
 
 cdef object convert_io(object value, int typenum):
+    # XXX: this should probably be moved to C++ level
     if typenum == cnp.NPY_BOOL:
         return (value != 0)
     return value
