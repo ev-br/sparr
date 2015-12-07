@@ -115,16 +115,20 @@ class TestBasicPyBool(BasicMixin, TestCase):
 
 
 class ArithmeticsMixin(object):
-    ma = MapArray()
-    ma[1, 1] = 1.
-    ma[2, 4] = 2.
-
-    rhs = MapArray()
-    rhs[2, 4] = 3.
-    rhs.fill_value = -8
 
     iop = operator.iadd       # x = iop(x, y) is x += y
     op = operator.add
+
+    def setUp(self):
+        ma = MapArray(dtype=self.dtype)
+        ma[1, 1] = 1.
+        ma[2, 4] = 2.
+        self.ma = ma
+
+        rhs = MapArray(dtype=self.dtype)
+        rhs[2, 4] = 3.
+        rhs.fill_value = -8
+        self.rhs = rhs
 
     def test_inplace_iop_scalar(self):
         ma1 = self.ma.copy()
