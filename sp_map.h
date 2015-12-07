@@ -44,12 +44,12 @@ struct map_array_t
     void set_one(const index_type& idx, const T& value);
 
     // indexing helpers
-    single_index_type _flat_index(const index_type& index) const;
+    I _flat_index(const index_type& index) const;
 
     // FIXME: return error codes / raise exceptions. Below and elsewhere. 
     // convert to a dense representation (C order). Caller's responsible for
     // allocating memory.
-    void todense(void* dest, const single_index_type len) const;
+    void todense(void* dest, const I len) const;
 
     // elementwise operations
     void inplace_unary_op(T (*fptr)(T x, T a, T b), T a, T b);  // x <- f(x, a, b)
@@ -231,18 +231,18 @@ map_array_t<T, I, num_dim>::set_shape(const index_type& shp)
 /* Flat index to an array. C order, 2D only.
  */
 template<typename T, typename I, size_t num_dim>
-inline single_index_type
+inline I
 map_array_t<T, I, num_dim>::_flat_index(const typename map_array_t<T, I, num_dim>::index_type& index) const
 {
     assert(num_dim == 2);
-    single_index_type stride = shape_[1];
+    I stride = shape_[1];
     return index[0]*stride + index[1];
 }
 
 
 template<typename T, typename I, size_t num_dim>
 inline void
-map_array_t<T, I, num_dim>::todense(void* dest, const single_index_type num_elem) const
+map_array_t<T, I, num_dim>::todense(void* dest, const I num_elem) const
 {
     if (num_elem < 0){ throw std::runtime_error("num_elem < 0"); }
     if (num_elem == 0){ return; }
@@ -254,7 +254,7 @@ map_array_t<T, I, num_dim>::todense(void* dest, const single_index_type num_elem
     // fill nonzero elements
     map_array_t<T, I, num_dim>::iter_nonzero_type it = begin_nonzero();
     for(; it != end_nonzero(); ++it){
-        single_index_type idx = _flat_index(it->first);
+        I idx = _flat_index(it->first);
         assert(idx < num_elem);
         _dest[idx] = it->second;
     }
