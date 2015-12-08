@@ -337,5 +337,87 @@ class TestCasting(TestCase):
         assert_allclose(m.todense(), im.todense() + 1.2, atol=1e-15)
 
 
+class CmpMixin(object):
+
+    def setUp(self):
+        self.lhs = MapArray(dtype=self.ldtype)
+        self.lhs[0, 1] = 1
+        self.lhs[1, 0] = 3
+
+        self.rhs = MapArray(dtype=self.rdtype, fill_value=2)
+        self.rhs[0, 1] = 1
+        self.rhs[1, 0] = 5
+
+    def test_less(self):
+        # array vs array
+        assert_equal((self.lhs < self.rhs).todense(),
+                     self.lhs.todense() < self.rhs.todense())
+
+        # array vs scalar
+        value = self.rhs.fill_value
+        assert_equal((self.lhs < value).todense(),
+                     self.lhs.todense() < value)
+
+    def test_leq(self):
+        # array vs array
+        assert_equal((self.lhs <= self.rhs).todense(),
+                     self.lhs.todense() <= self.rhs.todense())
+
+        # array vs scalar
+        value = self.rhs.fill_value
+        assert_equal((self.lhs <= value).todense(),
+                     self.lhs.todense() <= value)
+
+    def test_equal(self):
+        # array vs array
+        assert_equal((self.lhs == self.rhs).todense(),
+                     self.lhs.todense() == self.rhs.todense())
+
+        # array vs scalar
+        value = self.rhs.fill_value
+        assert_equal((self.lhs == value).todense(),
+                     self.lhs.todense() == value)
+
+    def test_neq(self):
+        # array vs array
+        assert_equal((self.lhs != self.rhs).todense(),
+                     self.lhs.todense() != self.rhs.todense())
+
+        # array vs scalar
+        value = self.rhs.fill_value
+        assert_equal((self.lhs != value).todense(),
+                     self.lhs.todense() != value)
+
+    def test_geq(self):
+        # array vs array
+        assert_equal((self.lhs >= self.rhs).todense(),
+                     self.lhs.todense() >= self.rhs.todense())
+
+        # array vs scalar
+        value = self.rhs.fill_value
+        assert_equal((self.lhs >= value).todense(),
+                     self.lhs.todense() >= value)
+
+    def test_greater(self):
+        # array vs array
+        assert_equal((self.lhs > self.rhs).todense(),
+                     self.lhs.todense() > self.rhs.todense())
+
+        # array vs scalar
+        value = self.rhs.fill_value
+        assert_equal((self.lhs > value).todense(),
+                     self.lhs.todense() > value)
+
+
+class CmpDoubleDouble(CmpMixin, TestCase):
+    ldtype = float
+    rdtype = float
+
+
+class CmpDoubleInt(CmpMixin, TestCase):
+    ldtype = float
+    rdtype = int
+
+
 if __name__ == "__main__":
     run_module_suite()
