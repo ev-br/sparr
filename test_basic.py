@@ -267,6 +267,10 @@ class TestArithmPyInt(ArithmeticsMixin, TestCase):
     dtype = int
 
 
+class TestArithmPyBool(ArithmeticsMixin, TestCase):
+    dtype = bool
+
+
 class MulMixin(ArithmeticsMixin):
     iop = operator.imul       # x = iop(x, y) is x *= y
     op = operator.mul
@@ -282,6 +286,11 @@ class TestMulFloat(MulMixin, TestCase):
 
 class TestMulPyInt(MulMixin, TestCase):
     dtype = int
+
+
+class TestMulPyBool(MulMixin, TestCase):
+    dtype = bool
+
 
 
 class TestCasting(TestCase):

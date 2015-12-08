@@ -16,7 +16,6 @@
 #  10. binops: func ptrs in inner loops are likely not good for inlining?
 #  11. add more tests for mixed binops
 #  12. add tests with NAN and INF, where supported
-#  13. test bool + bool vs numpy (let's be consistent if mysterious)
 #  14. comparisons
 #
 #  7. construct from_dense
