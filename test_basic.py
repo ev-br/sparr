@@ -358,6 +358,12 @@ class CmpMixin(object):
         assert_equal((self.lhs < value).todense(),
                      self.lhs.todense() < value)
 
+        # scalar vs array
+        value = self.lhs.fill_value
+        assert_equal((value < self.rhs).todense(),
+                     value < self.rhs.todense())
+
+
     def test_leq(self):
         # array vs array
         assert_equal((self.lhs <= self.rhs).todense(),
@@ -367,6 +373,11 @@ class CmpMixin(object):
         value = self.rhs.fill_value
         assert_equal((self.lhs <= value).todense(),
                      self.lhs.todense() <= value)
+
+        # scalar vs array
+        value = self.lhs.fill_value
+        assert_equal((value <= self.rhs).todense(),
+                     value <= self.rhs.todense())
 
     def test_equal(self):
         # array vs array
@@ -378,6 +389,11 @@ class CmpMixin(object):
         assert_equal((self.lhs == value).todense(),
                      self.lhs.todense() == value)
 
+        # scalar vs array
+        value = self.lhs.fill_value
+        assert_equal((value == self.rhs).todense(),
+                     value == self.rhs.todense())
+
     def test_neq(self):
         # array vs array
         assert_equal((self.lhs != self.rhs).todense(),
@@ -387,6 +403,12 @@ class CmpMixin(object):
         value = self.rhs.fill_value
         assert_equal((self.lhs != value).todense(),
                      self.lhs.todense() != value)
+
+        # scalar vs array
+        value = self.lhs.fill_value
+        assert_equal((value != self.rhs).todense(),
+                     value != self.rhs.todense())
+
 
     def test_geq(self):
         # array vs array
@@ -398,6 +420,11 @@ class CmpMixin(object):
         assert_equal((self.lhs >= value).todense(),
                      self.lhs.todense() >= value)
 
+        # scalar vs array
+        value = self.lhs.fill_value
+        assert_equal((value >= self.rhs).todense(),
+                     value >= self.rhs.todense())
+
     def test_greater(self):
         # array vs array
         assert_equal((self.lhs > self.rhs).todense(),
@@ -407,6 +434,11 @@ class CmpMixin(object):
         value = self.rhs.fill_value
         assert_equal((self.lhs > value).todense(),
                      self.lhs.todense() > value)
+
+        # scalar vs array
+        value = self.lhs.fill_value
+        assert_equal((value > self.rhs).todense(),
+                     value > self.rhs.todense())
 
 
 class CmpDoubleDouble(CmpMixin, TestCase):
