@@ -43,6 +43,8 @@ struct map_array_t
     T get_one(const index_type& idx) const;
     void set_one(const index_type& idx, const T& value);
 
+    iter_nonzero_type find(const index_type& idx) const { return data_.find(idx);}
+
     // indexing helpers
     I _flat_index(const index_type& index) const;
 
@@ -57,6 +59,10 @@ struct map_array_t
                            const map_array_t<T, I, num_dim>* other,
                            T a,
                            T b); // x <- f(x, y, a, b), e.g. x <- a*x + b*y
+
+    template<typename S> void apply_binop(T (*binop)(S x, S y),
+                                          const map_array_t<S, I, num_dim>* first,
+                                          const map_array_t<S, I, num_dim>* second);
 
     private:
         map_type data_;
@@ -109,7 +115,7 @@ template<typename T, typename I, size_t num_dim>
 inline T
 map_array_t<T, I, num_dim>::get_one(const map_array_t::index_type& idx) const
 {
-    iter_nonzero_type it = data_.find(idx);
+    iter_nonzero_type it = this->find(idx);
 
     if (it == data_.end()){
         return fill_value_;
@@ -193,6 +199,61 @@ map_array_t<T, I, num_dim>::inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
 
 
 template<typename T, typename I, size_t num_dim>
+template<typename S>
+inline void 
+map_array_t<T, I, num_dim>::apply_binop(T (*binop)(S x, S y),
+                                        const map_array_t<S, I, num_dim>* arg1,
+                                        const map_array_t<S, I, num_dim>* arg2)
+{
+    if(!arg1)
+        throw std::logic_error("apply_binop: arg1 is NULL");
+    if(!arg2)
+        throw std::logic_error("apply_binop: arg2 is NULL");
+
+    // check that the dimensions are compatible
+    for(size_t j=0; j<num_dim; ++j){
+        if(arg1->shape()[j] != arg2->shape()[j]){
+            throw std::invalid_argument("Binop: incompatible dimensions.");
+        }
+    }
+
+    // run over the nonzero elements of *arg1. This is O(n1 * log(n2) * log(n1))
+    typename map_array_t<S, I, num_dim>::iter_nonzero_type it;
+    for(it = arg1->begin_nonzero();
+        it != arg1->end_nonzero();
+        ++it){
+            index_type idx = it->first;
+            S y = arg2->get_one(idx);           // NB: may equal other.fill_value
+            T value = (*binop)(it->second, y);
+            this->set_one(idx, value);
+    }
+
+    if(arg2 != arg1){
+        // run over the nonzero elements of *arg2; those which are present in both
+        // *arg1 and *arg2 have been taken care of already.
+        // This loop's complexity is O(n2 * log(n1) * log(n2))
+        typename map_array_t<S, I, num_dim>::iter_nonzero_type it1, it2;
+        for(it2 = arg2->begin_nonzero();
+            it2 != arg2->end_nonzero();
+            ++it2){
+                index_type idx = it2->first;
+                it1 = arg1->find(idx);
+                if (it1 == arg1->end_nonzero()){
+                    // it1->second is present in arg2 but not in arg1
+                    T value = (*binop)(it1->second, it2->second);
+                    this->set_one(idx, value);
+                }
+        }
+    }
+
+    // update fill_value
+    fill_value_ = (*binop)(arg1->fill_value(), arg2->fill_value());
+
+}
+
+
+
+template<typename T, typename I, size_t num_dim>
 inline typename map_array_t<T, I, num_dim>::index_type
 map_array_t<T, I, num_dim>::get_min_shape() const
 {
@@ -262,7 +323,6 @@ map_array_t<T, I, num_dim>::todense(void* dest, const I num_elem) const
 
 
 // TODO:  
-//        2. boolean ops a la numpy: return map_array_t of booleans (allocation!)
 //        4. slicing
 //        5. special-case zero fill_value (memset, also matmul?)
 //        6. flat indexing for d != 2
