@@ -486,7 +486,7 @@ cdef class MapArray:
             Figure out the common dtype, copy if necessary. Then dispatch
             on the type.
 
-            XXX: this probably copies more than necessary.
+            XXX: this probably copies more than necessary (ditto for binops).
         """
         # figure out dtypes, copy if necessary
         self_typenum = self.dtype.num
