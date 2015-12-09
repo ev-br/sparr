@@ -16,13 +16,13 @@
 #  10. binops: func ptrs in inner loops are likely not good for inlining?
 #  11. add more tests for mixed binops
 #  12. add tests with NAN and INF, where supported
-#  14. comparisons
 #
 #  7. construct from_dense
 #  8. add more binops (__mul__) & make them cast a la __add__
 #  9. add matmul and operator @
 #  10. add more Py types
 #  12. to_csr interop
+#  13. add bitwise ops so that (1 < x) & (x < 2) works a la numpy
 #
 #  Minor quibbles:
 #  1. access to elements of fixed_capacity: operator[] or ELEM macro
@@ -73,12 +73,23 @@ cdef extern from "sp_map.h" namespace "sparray":
         void inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
                                const map_array_t[T] *p_other, T a, T b) except +  # x <- f(x, y, a, b)
 
+        void apply_binop[S](T (*binop)(S x, S y),
+                         const map_array_t[S] *first,
+                         const map_array_t[S] *second) except +;  # z[i] <- f(x[i], y[i]) for z in self, 
+                                                                  #   x in first, y in second
 
 cdef extern from "elementwise_ops.h" namespace "sparray":
     T linear_unary_op[T](T, T, T)
     T power_unary_op[T](T, T, T)
     T linear_binary_op[T](T, T, T, T)
     T mul_binary_op[T](T, T, T, T)
+
+    npy_bool equal[S](S, S)
+    npy_bool less_equal[S](S, S)
+    npy_bool greater_equal[S](S, S)
+    npy_bool not_equal[S](S, S)
+    npy_bool less[S](S, S)
+    npy_bool greater[S](S, S)
 
 
 cdef index_type index_from_tuple(tuple tpl):
@@ -456,35 +467,78 @@ cdef class MapArray:
                 raise ValueError("dense cmp: op = ." % op)
 
         if isinstance(other, MapArray):
-            result = MapArray(dtype=bool, shape=self.shape, fill_value=False)
-
-            # figure out dtypes, copy if necessary
-            if self.typenum != other.typenum:
-                res_type = np.promote_types(self.dtype, other.dtype)
-                if res_type.num != self.typenum:
-                    # upcast self and operate on the copy
-                    newobj = self.astype(res_type)
-                    return newobj.__richcmp__(other, op)
-
-                # by this stage, self.dtype == res_type
-                if self.typenum != other.typenum:
-                    # upcast other
-                    other = other.astype(res_type)
-
-            # dispatch
-            {{for NUM, CT in zip(TNUMS, CTYPES)}}
-            if self.typenum == {{NUM}}:
-
-                # FIXME
-
-                result.p.{{CT}}_ptr.inplace_binary_op(mul_binary_op[{{CT}}],
-                                                    (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>0)
-                return result
-            {{endfor}}
+            return self._cmp(other, op)
 
         # else, other is a scalar
+        # promote it to a fill_value of an empty array and repeat
+        dt = np.asarray(other).dtype     # XXX there must be a more direct way
+        arr_other = MapArray(shape=self.shape,
+                             dtype=dt,
+                             fill_value=other)
+        
+        return self._cmp(arr_other, op)
 
-        raise NotImplementedError
+
+    # sparse op sparse implementation of __richcmp__
+    def _cmp(MapArray self not None, MapArray other not None, int op):
+        """ Sparse of sparse implementation of __richcmp__.
+
+            Figure out the common dtype, copy if necessary. Then dispatch
+            on the type.
+
+            XXX: this probably copies more than necessary (ditto for binops).
+        """
+        # figure out dtypes, copy if necessary
+        self_typenum = self.dtype.num
+        other_typenum = other.dtype.num           
+        if self_typenum != other_typenum:
+            res_type = np.promote_types(self.dtype, other.dtype)
+            if res_type.num != self_typenum:
+                # upcast self and operate on the copy
+                newobj = self.astype(res_type)
+                return newobj._cmp(other, op)
+
+            # by this stage, self.dtype == res_type
+            if self_typenum != other_typenum:
+                # upcast other
+                other = other.astype(res_type)
+
+        # by now, both self and other are of the same dtype
+        result = MapArray(dtype=bool)
+
+        # dispatch on the types
+        {{for NUM, CT in zip(TNUMS, CTYPES)}}
+        if self.dtype.num == {{NUM}}:
+            if op == 0:
+                result.p.npy_bool_ptr.apply_binop[{{CT}}](less[{{CT}}],
+                                                         self.p.{{CT}}_ptr,
+                                                         other.p.{{CT}}_ptr)
+            elif op == 1:
+                result.p.npy_bool_ptr.apply_binop[{{CT}}](less_equal[{{CT}}],
+                                                         self.p.{{CT}}_ptr,
+                                                         other.p.{{CT}}_ptr)
+            elif op == 2:
+                result.p.npy_bool_ptr.apply_binop[{{CT}}](equal[{{CT}}],
+                                                         self.p.{{CT}}_ptr,
+                                                         other.p.{{CT}}_ptr)
+            elif op == 3:
+                result.p.npy_bool_ptr.apply_binop[{{CT}}](not_equal[{{CT}}],
+                                                         self.p.{{CT}}_ptr,
+                                                         other.p.{{CT}}_ptr)
+
+            elif op == 4:
+                result.p.npy_bool_ptr.apply_binop[{{CT}}](greater[{{CT}}],
+                                                         self.p.{{CT}}_ptr,
+                                                         other.p.{{CT}}_ptr)
+            elif op == 5:
+                result.p.npy_bool_ptr.apply_binop[{{CT}}](greater_equal[{{CT}}],
+                                                         self.p.{{CT}}_ptr,
+                                                         other.p.{{CT}}_ptr)
+            else:
+                raise ValueError("sparse cmp: op = ." % op)
+            return result
+
+        {{endfor}}
 
 
 cnp.import_array()

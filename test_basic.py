@@ -6,6 +6,14 @@ from numpy.testing import (run_module_suite, TestCase, assert_equal, assert_,
                            assert_allclose, assert_raises,)
 from numpy.testing.decorators import knownfailureif, skipif
 
+try:
+    from scipy._lib._version import NumpyVersion
+except ImportError:
+    def NumpyVersion(vstr):
+        return vstr
+OLD_NUMPY = NumpyVersion(np.__version__) < '1.9.1'
+
+
 from sp_map import MapArray
 
 
@@ -358,6 +366,20 @@ class CmpMixin(object):
         assert_equal((self.lhs < value).todense(),
                      self.lhs.todense() < value)
 
+        # scalar vs array
+        value = self.lhs.fill_value
+        assert_equal((value < self.rhs).todense(),
+                     value < self.rhs.todense())
+
+        # array vs np.array (which densifies)
+        assert_equal(self.lhs < self.rhs.todense(),
+                     self.lhs.todense() < self.rhs.todense())
+
+    @skipif(OLD_NUMPY, 'older numpy is too greedy w.r.t comparisons')
+    def test_less_np_lhs(self):
+        assert_equal(self.lhs.todense() < self.rhs,
+                     self.lhs.todense() < self.rhs.todense())
+
     def test_leq(self):
         # array vs array
         assert_equal((self.lhs <= self.rhs).todense(),
@@ -367,6 +389,20 @@ class CmpMixin(object):
         value = self.rhs.fill_value
         assert_equal((self.lhs <= value).todense(),
                      self.lhs.todense() <= value)
+
+        # scalar vs array
+        value = self.lhs.fill_value
+        assert_equal((value <= self.rhs).todense(),
+                     value <= self.rhs.todense())
+
+        # array vs np.array (which densifies)
+        assert_equal(self.lhs <= self.rhs.todense(),
+                     self.lhs.todense() <= self.rhs.todense())
+
+    @skipif(OLD_NUMPY, 'older numpy is too greedy w.r.t comparisons')
+    def test_leq_np_lhs(self):
+        assert_equal(self.lhs.todense() <= self.rhs,
+                     self.lhs.todense() <= self.rhs.todense())
 
     def test_equal(self):
         # array vs array
@@ -378,6 +414,20 @@ class CmpMixin(object):
         assert_equal((self.lhs == value).todense(),
                      self.lhs.todense() == value)
 
+        # scalar vs array
+        value = self.lhs.fill_value
+        assert_equal((value == self.rhs).todense(),
+                     value == self.rhs.todense())
+
+        # array vs np.array (which densifies)
+        assert_equal(self.lhs == self.rhs.todense(),
+                     self.lhs.todense() == self.rhs.todense())
+
+    @skipif(OLD_NUMPY, 'older numpy is too greedy w.r.t comparisons')
+    def test_equal_np_lhs(self):
+        assert_equal(self.lhs.todense() == self.rhs,
+                     self.lhs.todense() == self.rhs.todense())
+
     def test_neq(self):
         # array vs array
         assert_equal((self.lhs != self.rhs).todense(),
@@ -387,6 +437,20 @@ class CmpMixin(object):
         value = self.rhs.fill_value
         assert_equal((self.lhs != value).todense(),
                      self.lhs.todense() != value)
+
+        # scalar vs array
+        value = self.lhs.fill_value
+        assert_equal((value != self.rhs).todense(),
+                     value != self.rhs.todense())
+
+        # array vs np.array (which densifies)
+        assert_equal(self.lhs != self.rhs.todense(),
+                     self.lhs.todense() != self.rhs.todense())
+
+    @skipif(OLD_NUMPY, 'older numpy is too greedy w.r.t comparisons')
+    def test_neq_np_lhs(self):
+        assert_equal(self.lhs.todense() != self.rhs,
+                     self.lhs.todense() != self.rhs.todense())
 
     def test_geq(self):
         # array vs array
@@ -398,6 +462,20 @@ class CmpMixin(object):
         assert_equal((self.lhs >= value).todense(),
                      self.lhs.todense() >= value)
 
+        # scalar vs array
+        value = self.lhs.fill_value
+        assert_equal((value >= self.rhs).todense(),
+                     value >= self.rhs.todense())
+
+        # array vs np.array (which densifies)
+        assert_equal(self.lhs >= self.rhs.todense(),
+                     self.lhs.todense() >= self.rhs.todense())
+
+    @skipif(OLD_NUMPY, 'older numpy is too greedy w.r.t comparisons')
+    def test_geq_np_lhs(self):
+        assert_equal(self.lhs.todense() >= self.rhs,
+                     self.lhs.todense() >= self.rhs.todense())
+
     def test_greater(self):
         # array vs array
         assert_equal((self.lhs > self.rhs).todense(),
@@ -407,6 +485,21 @@ class CmpMixin(object):
         value = self.rhs.fill_value
         assert_equal((self.lhs > value).todense(),
                      self.lhs.todense() > value)
+
+        # scalar vs array
+        value = self.lhs.fill_value
+        assert_equal((value > self.rhs).todense(),
+                     value > self.rhs.todense())
+
+        # array vs np.array (which densifies)
+        assert_equal(self.lhs > self.rhs.todense(),
+                     self.lhs.todense() > self.rhs.todense())
+
+    @skipif(OLD_NUMPY, 'older numpy is too greedy w.r.t comparisons')
+    def test_greater_np_lhs(self):
+        # fails on numpy 1.6.2., works on 1.11.dev
+        assert_equal(self.lhs.todense() > self.rhs,
+                     self.lhs.todense() > self.rhs.todense())
 
 
 class CmpDoubleDouble(CmpMixin, TestCase):
