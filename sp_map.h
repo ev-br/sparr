@@ -64,6 +64,12 @@ struct map_array_t
                                           const map_array_t<S, I, num_dim>* first,
                                           const map_array_t<S, I, num_dim>* second);
 
+    // GEMM: C <- alpha A @ B + beta C 
+    void inplace_gemm(const T alpha,
+                      const map_array_t<T, I, num_dim>* A,
+                      const map_array_t<T, I, num_dim>* B,
+                      const T beta);
+
     private:
         map_type data_;
         index_type shape_;
@@ -251,6 +257,54 @@ map_array_t<T, I, num_dim>::apply_binop(T (*binop)(S x, S y),
 
 }
 
+
+template<typename T, typename I, size_t num_dim>
+inline void
+map_array_t<T, I, num_dim>::inplace_gemm(const T alpha,
+                                         const map_array_t<T, I, num_dim>* A,
+                                         const map_array_t<T, I, num_dim>* B,
+                                         const T beta)
+{
+    if(!A)
+        throw std::logic_error("apply_binop: A is NULL");
+    if(!B)
+        throw std::logic_error("apply_binop: B is NULL");
+
+    assert(num_dim == 2);
+
+    if(A->shape()[1] != B->shape()[0])
+        throw std::invalid_argument("GEMM: incompatible dimensions.");
+
+
+    // XXX non-zero fill_values are not implemented. The result is likely
+    // dense anyway, so having to convert to dense explicitly is not *that* bad.
+    if((A->fill_value() != 0) || (B->fill_value() != 0))
+        throw std::runtime_error("Non-zero fill_values not handled yet.");
+
+    // C_{ik} = alpha A_{ij} B_{jk} + beta C_{ik}
+    typename map_array_t<T, I, num_dim>::iter_nonzero_type itA, itB;
+    typename map_array_t<T, I, num_dim>::index_type idxA, idxB;
+
+    T Aij, Bjk, Cik, value;
+    I arr[num_dim];
+    for (itA = A->begin_nonzero(); itA != A->end_nonzero(); ++itA){
+        Aij = itA->second - A->fill_value();
+        idxA = itA->first;
+        arr[0] = idxA[0];
+        for(itB = B->begin_nonzero(); itB != B->end_nonzero(); ++itB){
+            idxB = itB->first;
+            if( idxA[1] != idxB[0])
+                continue;                       // XXX row/column_iterators?
+
+            Bjk = itB->second - B->fill_value();
+            arr[1] = idxB[1];
+            typename map_array_t<T, I, num_dim>::index_type idx(arr);
+            Cik = this->get_one(idx);
+            value = alpha*Aij*Bjk + beta*Cik;
+            this->set_one(idx, value);
+        }
+    }
+}
 
 
 template<typename T, typename I, size_t num_dim>

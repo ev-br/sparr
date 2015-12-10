@@ -78,6 +78,14 @@ cdef extern from "sp_map.h" namespace "sparray":
                          const map_array_t[S] *second) except +;  # z[i] <- f(x[i], y[i]) for z in self, 
                                                                   #   x in first, y in second
 
+        # follow the BLAS's convention: *gemm(alpha, A, B, beta, C) for
+        # c <- alpha A @ B + beta C
+        void inplace_gemm(const T alpha,
+                          const map_array_t[T] *A,
+                          const map_array_t[T] *B,
+                          const T beta) except +
+
+
 cdef extern from "elementwise_ops.h" namespace "sparray":
     T linear_unary_op[T](T, T, T)
     T power_unary_op[T](T, T, T)
@@ -391,6 +399,52 @@ cdef class MapArray:
                              fill_value=other)
         return _richcmp_impl(self, arr_other, op)
 
+    def gemm(self, alpha, A, B, beta=0):
+        """ In-place GEMM: ``C <- alpha * A @ B + beta * C``.
+        """
+        # XXX: 1. what is sparse @ dense, densify or complain?
+        #      2. scalar dtypes: upcast arrays or downcast scalars?
+        #               e.g., double scalar times int array.
+        if not isinstance(A, MapArray) or not isinstance(B, MapArray):
+            raise NotImplementedError("Gemm only handles sparse arrays.")
+
+        if A.fill_value != 0 or B.fill_value != 0:
+            raise NotImplementedError("The result is likely dense.")
+
+        # modify self in-place (hence swallow the return value)
+        _gemm_impl(self, alpha, A, B, beta)
+
+##### implementations
+
+def _gemm_impl(MapArray self not None,
+               alpha,
+               MapArray A not None,
+               MapArray B not None,
+               beta=0):
+
+    # handle types
+    if A.dtype != self.dtype:
+        AA = A.astype(self.dtype)
+        return _gemm_impl(self, alpha, AA, B, beta)
+    if B.dtype != self.dtype:
+        BB = B.astype(self.dtype)
+        return _gemm_impl(self, alpha, A, BB, beta)
+
+    # by now all arrays are of the same dtype, might need to cast scalars still.
+    {{for NUM, CT in zip(TNUMS, CTYPES)}}
+    cdef {{CT}} {{CT}}_alpha, {{CT}}_beta
+    if self.typenum == {{NUM}}:
+        # Cython syntax: <double?>(alpha) raises TypeError if the cast fails
+        {{CT}}_alpha = <{{CT}}?>(alpha)
+        {{CT}}_beta = <{{CT}}?>(beta)
+        self.p.{{CT}}_ptr.inplace_gemm({{CT}}_alpha,
+                                       A.p.{{CT}}_ptr,
+                                       B.p.{{CT}}_ptr,
+                                       {{CT}}_beta)
+        return self
+    {{endfor}}
+    raise NotImplementedError
+
 
 def _richcmp_impl(MapArray self not None, MapArray other not None, int op):
     """ Sparse <op> sparse implementation of __richcmp__.
@@ -511,5 +565,6 @@ def _imul_impl(MapArray self, MapArray other):
     {{endfor}}
     return NotImplemented
 
+            
 
 cnp.import_array()
