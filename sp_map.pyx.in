@@ -302,57 +302,15 @@ cdef class MapArray:
             # hand over to __add__ for densification
             return NotImplemented
 
-        cdef int other_typenum
         if isinstance(other, MapArray):
+            return _iadd_impl(self, other)
 
-            # figure out dtypes, copy if necessary
-            other_typenum = other.dtype.num
-            if self.typenum != other_typenum:
-                res_type = np.promote_types(self.dtype, other.dtype)
-                if res_type.num != self.typenum:
-                    # upcast self and operate on the copy
-                    newobj = self.astype(res_type)
-                    return newobj.__iadd__(other)
-
-                # by this stage, self.dtype == res_type
-                if self.typenum != other_typenum:
-                    # upcast other
-                    other = other.astype(res_type)
-
-            # dispatch
-            {{for NUM, CT in zip(TNUMS, CTYPES)}}
-            if self.typenum == {{NUM}}:
-                self.p.{{CT}}_ptr.inplace_binary_op(linear_binary_op[{{CT}}],
-                                                    (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>1)
-                return self
-            {{endfor}}
-            return NotImplemented
-
-        # it must be a scalar then
-        res_type = np.promote_types(self.dtype, np.asarray(other).dtype)
-        if res_type.num != self.typenum:
-            # upcast self and operate on the copy
-            try:
-                newobj = self.astype(res_type)
-                return newobj.__iadd__(other)
-            except TypeError:
-                # strings, lists and other unsupported dtypes
-                return NotImplemented
-
-        # by this stage, self.dtype is wide enough; maybe need to cast a scalar
-        {{for NUM, CT in zip(TNUMS, CTYPES)}}
-        cdef {{CT}} {{CT}}_other
-        if self.typenum == {{NUM}}:
-            try:
-                # try casting to a POD: double_other = <double?>(other) etc (Cython syntax)
-                {{CT}}_other = <{{CT}}?>(other)
-                self.p.{{CT}}_ptr.inplace_unary_op(linear_unary_op[{{CT}}], <{{CT}}>1, {{CT}}_other)
-                return self
-            except TypeError:
-                # strings, lists and other animals
-                return NotImplemented
-        {{endfor}}
-        return NotImplemented
+        # else, other is a scalar.
+        dt = np.asarray(other).dtype     # XXX there must be a more direct way
+        arr_other = MapArray(shape=self.shape,
+                             dtype=dt,
+                             fill_value=other)
+        return _iadd_impl(self, arr_other)
 
     def __add__(self, other):
         if isinstance(self, MapArray):
@@ -374,58 +332,15 @@ cdef class MapArray:
             # hand over to __mul__ for densification
             return NotImplemented
 
-        cdef int other_typenum
         if isinstance(other, MapArray):
+            return _imul_impl(self, other)
 
-            # figure out dtypes, copy if necessary
-            other_typenum = other.dtype.num
-            if self.typenum != other_typenum:
-                res_type = np.promote_types(self.dtype, other.dtype)
-                if res_type.num != self.typenum:
-                    # upcast self and operate on the copy
-                    newobj = self.astype(res_type)
-                    return newobj.__imul__(other)
-
-                # by this stage, self.dtype == res_type
-                if self.typenum != other_typenum:
-                    # upcast other
-                    other = other.astype(res_type)
-
-            # dispatch
-            {{for NUM, CT in zip(TNUMS, CTYPES)}}
-            if self.typenum == {{NUM}}:
-                self.p.{{CT}}_ptr.inplace_binary_op(mul_binary_op[{{CT}}],
-                                                    (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>0)  # BUG: mixed-type ops
-                return self
-            {{endfor}}
-            return NotImplemented
-
-        # it must be a scalar then
-        res_type = np.promote_types(self.dtype, np.asarray(other).dtype)
-        if res_type.num != self.typenum:
-            # upcast self and operate on the copy
-            try:
-                newobj = self.astype(res_type)
-                return newobj.__imul__(other)
-            except TypeError:
-                # strings, lists and other unsupported dtypes
-                return NotImplemented
-
-        # by this stage, self.dtype is wide enough; maybe need to cast a scalar
-        {{for NUM, CT in zip(TNUMS, CTYPES)}}
-        cdef {{CT}} {{CT}}_other
-        if self.typenum == {{NUM}}:
-            try:
-                # try casting to a POD: double_other = <double?>(other) etc (Cython syntax)
-                {{CT}}_other = <{{CT}}?>(other)
-                self.p.{{CT}}_ptr.inplace_unary_op(linear_unary_op[{{CT}}], {{CT}}_other, <{{CT}}>0,)
-                return self
-            except TypeError:
-                # strings, lists and other animals
-                return NotImplemented
-        {{endfor}}
-        return NotImplemented
-
+        # else, other is a scalar.
+        dt = np.asarray(other).dtype     # XXX there must be a more direct way
+        arr_other = MapArray(shape=self.shape,
+                             dtype=dt,
+                             fill_value=other)
+        return _imul_impl(self, arr_other)
 
     def __mul__(self, other):
         if isinstance(self, MapArray):
@@ -470,12 +385,10 @@ cdef class MapArray:
             return _richcmp_impl(self, other, op)
 
         # else, other is a scalar
-        # promote it to a fill_value of an empty array and repeat
         dt = np.asarray(other).dtype     # XXX there must be a more direct way
         arr_other = MapArray(shape=self.shape,
                              dtype=dt,
                              fill_value=other)
-        
         return _richcmp_impl(self, arr_other, op)
 
 
@@ -535,6 +448,68 @@ def _richcmp_impl(MapArray self not None, MapArray other not None, int op):
         return result
 
     {{endfor}}
+
+
+def _iadd_impl(MapArray self not None, MapArray other not None):
+    """ Sparse <op> sparse implementation of __iadd__.
+
+        Figure out the common dtype, copy if necessary. Then dispatch
+        on the type.
+    """
+    # figure out dtypes, copy if necessary
+    if self.typenum != other.typenum:
+        res_type = np.promote_types(self.dtype, other.dtype)
+        if res_type.num != self.typenum:
+            # upcast self and operate on the copy
+            newobj = self.astype(res_type)
+            return _iadd_impl(newobj, other)
+
+        # by this stage, self.dtype == res_type
+        if self.typenum != other.typenum:
+            # upcast other
+            other = other.astype(res_type)
+
+    # dispatch
+    {{for NUM, CT in zip(TNUMS, CTYPES)}}
+    if self.typenum == {{NUM}}:
+        self.p.{{CT}}_ptr.inplace_binary_op(linear_binary_op[{{CT}}],
+                                            (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>1)
+        return self
+    {{endfor}}
+    return NotImplemented
+
+
+def _imul_impl(MapArray self, MapArray other):
+    """ Sparse <op> sparse implementation of __imul__.
+
+        Figure out the common dtype, copy if necessary. Then dispatch
+        on the type.
+
+        XXX: this is too similar to _iadd_impl. Templating?
+
+    """
+    # figure out dtypes, copy if necessary
+    other.typenum = other.dtype.num
+    if self.typenum != other.typenum:
+        res_type = np.promote_types(self.dtype, other.dtype)
+        if res_type.num != self.typenum:
+            # upcast self and operate on the copy
+            newobj = self.astype(res_type)
+            return _imul_impl(newobj, other)
+
+        # by this stage, self.dtype == res_type
+        if self.typenum != other.typenum:
+            # upcast other
+            other = other.astype(res_type)
+
+    # dispatch
+    {{for NUM, CT in zip(TNUMS, CTYPES)}}
+    if self.typenum == {{NUM}}:
+        self.p.{{CT}}_ptr.inplace_binary_op(mul_binary_op[{{CT}}],
+                                            (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>0)
+        return self
+    {{endfor}}
+    return NotImplemented
 
 
 cnp.import_array()
