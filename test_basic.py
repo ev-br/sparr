@@ -512,5 +512,55 @@ class CmpDoubleInt(CmpMixin, TestCase):
     rdtype = int
 
 
+class GEMMMixin(object):
+
+    def setUp(self):
+        self.a = MapArray(dtype=self.dtype_a)
+        self.a[3, 4] = 11
+        self.a[1, 2] = 12
+        self.a[4, 4] = 13
+
+        self.b = self.a.astype(self.dtype_b)
+
+    def test_basic(self):
+        a, b = self.a, self.b
+        x = MapArray()
+        x.gemm(1, a, b)
+        assert_allclose(x.todense(),
+                        np.dot(a.todense(), b.todense()), atol=1e-15)
+
+    def test_alpha(self):
+        # check that alpha has an expected effect
+        a, b = self.a, self.b
+        x = MapArray()
+        x.gemm(2, a, b)
+        assert_allclose(x.todense(),
+                        np.dot(a.todense(), b.todense()) * 2, atol=1e-15)
+
+        # also check beta
+        y = x.copy()
+        x.gemm(2, a, b, 3)
+        expected = 3 * y.todense() + 2 * np.dot(a.todense(), b.todense())
+        assert_allclose(x.todense(),
+                        expected, atol=1e-15)
+
+    def test_incompat_dims(self):
+        a, b = self.a, self.b
+        b[8, 12] = -101
+        with assert_raises(ValueError):
+            x = MapArray()
+            x.gemm(1, a, b)
+
+
+class TestGEMMFloat(GEMMMixin, TestCase):
+    dtype_a = float
+    dtype_b = float
+
+class TestGEMMFloatInt(GEMMMixin, TestCase):
+    dtype_a = float
+    dtype_b = int
+
+
+
 if __name__ == "__main__":
     run_module_suite()
