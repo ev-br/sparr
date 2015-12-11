@@ -20,7 +20,7 @@ struct map_array_t
 
     map_array_t(const T& fill_value = 0);
     map_array_t(const map_array_t& other);
-    void copy_from_other(const map_array_t *p_other);
+    template<typename S> void copy_from(const map_array_t<S, I, num_dim> *src);
 
     size_t ndim() const { return num_dim; }
     index_type shape() const { return shape_; }
@@ -43,13 +43,15 @@ struct map_array_t
     T get_one(const index_type& idx) const;
     void set_one(const index_type& idx, const T& value);
 
+    iter_nonzero_type find(const index_type& idx) const { return data_.find(idx);}
+
     // indexing helpers
-    single_index_type _flat_index(const index_type& index) const;
+    I _flat_index(const index_type& index) const;
 
     // FIXME: return error codes / raise exceptions. Below and elsewhere. 
     // convert to a dense representation (C order). Caller's responsible for
     // allocating memory.
-    void todense(void* dest, const single_index_type len) const;
+    void todense(void* dest, const I len) const;
 
     // elementwise operations
     void inplace_unary_op(T (*fptr)(T x, T a, T b), T a, T b);  // x <- f(x, a, b)
@@ -57,6 +59,16 @@ struct map_array_t
                            const map_array_t<T, I, num_dim>* other,
                            T a,
                            T b); // x <- f(x, y, a, b), e.g. x <- a*x + b*y
+
+    template<typename S> void apply_binop(T (*binop)(S x, S y),
+                                          const map_array_t<S, I, num_dim>* first,
+                                          const map_array_t<S, I, num_dim>* second);
+
+    // GEMM: C <- alpha A @ B + beta C 
+    void inplace_gemm(const T alpha,
+                      const map_array_t<T, I, num_dim>* A,
+                      const map_array_t<T, I, num_dim>* B,
+                      const T beta);
 
     private:
         map_type data_;
@@ -78,25 +90,30 @@ inline map_array_t<T, I, num_dim>::map_array_t(const T& fill_value)
 template<typename T, typename I, size_t num_dim>
 inline map_array_t<T, I, num_dim>::map_array_t(const map_array_t<T, I, num_dim>& other)
 {
-    copy_from_other(&other);
+    copy_from(&other);
 }
 
 // NB This could have been const map_array_t<...>&, but Cython wrappers
 // operate on pointers anyway.
 template<typename T, typename I, size_t num_dim>
-inline void 
-map_array_t<T, I, num_dim>::copy_from_other(const map_array_t<T, I, num_dim> *p_other)
+template<typename S>
+inline void
+map_array_t<T, I, num_dim>::copy_from(const map_array_t<S, I, num_dim> *src)
 {
-    if(!p_other)
+    if(!src)
         throw std::logic_error("copy from NULL");
-    if(p_other == this)
-        throw std::logic_error("copy from self.");
 
-    data_.insert(p_other->begin_nonzero(), p_other->end_nonzero());
-    for(size_t j=0; j < num_dim; ++j){
-        shape_[j] = p_other->shape()[j];
+    typename map_array_t<S, I, num_dim>::iter_nonzero_type it = src->begin_nonzero();
+
+    for(; it != src->end_nonzero(); ++it){
+        data_[it->first] = static_cast<T>(it->second);
     }
-    fill_value_ = p_other->fill_value();
+
+    for(size_t j=0; j < num_dim; ++j){
+        shape_[j] = src->shape()[j];
+    }
+
+    fill_value_ = static_cast<T>(src->fill_value());
 }
 
 
@@ -104,7 +121,7 @@ template<typename T, typename I, size_t num_dim>
 inline T
 map_array_t<T, I, num_dim>::get_one(const map_array_t::index_type& idx) const
 {
-    iter_nonzero_type it = data_.find(idx);
+    iter_nonzero_type it = this->find(idx);
 
     if (it == data_.end()){
         return fill_value_;
@@ -160,7 +177,7 @@ map_array_t<T, I, num_dim>::inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
         }
     }
 
-    // run other the nonzero elements of *this. This is O(n1 * log(n2))
+    // run over the nonzero elements of *this. This is O(n1 * log(n2))
     typename map_type::iterator it = data_.begin();
     for(; it != data_.end(); ++it){
         index_type idx = it->first;
@@ -177,13 +194,116 @@ map_array_t<T, I, num_dim>::inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
             index_type idx = it_other->first;
             it = data_.find(idx);
             if (it == data_.end()){
-                data_[idx] = (*fptr)(fill_value_, it_other->second, a, b);
+                it->second = (*fptr)(fill_value_, it_other->second, a, b);
             }
         }
     }
 
     // update fill_value
     fill_value_ = (*fptr)(fill_value_, p_other->fill_value(), a, b);
+}
+
+
+template<typename T, typename I, size_t num_dim>
+template<typename S>
+inline void 
+map_array_t<T, I, num_dim>::apply_binop(T (*binop)(S x, S y),
+                                        const map_array_t<S, I, num_dim>* arg1,
+                                        const map_array_t<S, I, num_dim>* arg2)
+{
+    if(!arg1)
+        throw std::logic_error("apply_binop: arg1 is NULL");
+    if(!arg2)
+        throw std::logic_error("apply_binop: arg2 is NULL");
+
+    // check that the dimensions are compatible
+    for(size_t j=0; j<num_dim; ++j){
+        if(arg1->shape()[j] != arg2->shape()[j]){
+            throw std::invalid_argument("Binop: incompatible dimensions.");
+        }
+    }
+
+    // run over the nonzero elements of *arg1. This is O(n1 * log(n2) * log(n1))
+    typename map_array_t<S, I, num_dim>::iter_nonzero_type it;
+    for(it = arg1->begin_nonzero();
+        it != arg1->end_nonzero();
+        ++it){
+            index_type idx = it->first;
+            S y = arg2->get_one(idx);           // NB: may equal other.fill_value
+            T value = (*binop)(it->second, y);
+            this->set_one(idx, value);
+    }
+
+    if(arg2 != arg1){
+        // run over the nonzero elements of *arg2; those which are present in both
+        // *arg1 and *arg2 have been taken care of already.
+        // This loop's complexity is O(n2 * log(n1) * log(n2))
+        typename map_array_t<S, I, num_dim>::iter_nonzero_type it1, it2;
+        for(it2 = arg2->begin_nonzero();
+            it2 != arg2->end_nonzero();
+            ++it2){
+                index_type idx = it2->first;
+                it1 = arg1->find(idx);
+                if (it1 == arg1->end_nonzero()){
+                    // it1->second is present in arg2 but not in arg1
+                    T value = (*binop)(it1->second, it2->second);
+                    this->set_one(idx, value);
+                }
+        }
+    }
+
+    // update fill_value
+    fill_value_ = (*binop)(arg1->fill_value(), arg2->fill_value());
+
+}
+
+
+template<typename T, typename I, size_t num_dim>
+inline void
+map_array_t<T, I, num_dim>::inplace_gemm(const T alpha,
+                                         const map_array_t<T, I, num_dim>* A,
+                                         const map_array_t<T, I, num_dim>* B,
+                                         const T beta)
+{
+    if(!A)
+        throw std::logic_error("apply_binop: A is NULL");
+    if(!B)
+        throw std::logic_error("apply_binop: B is NULL");
+
+    assert(num_dim == 2);
+
+    if(A->shape()[1] != B->shape()[0])
+        throw std::invalid_argument("GEMM: incompatible dimensions.");
+
+
+    // XXX non-zero fill_values are not implemented. The result is likely
+    // dense anyway, so having to convert to dense explicitly is not *that* bad.
+    if((A->fill_value() != 0) || (B->fill_value() != 0))
+        throw std::runtime_error("Non-zero fill_values not handled yet.");
+
+    // C_{ik} = alpha A_{ij} B_{jk} + beta C_{ik}
+    typename map_array_t<T, I, num_dim>::iter_nonzero_type itA, itB;
+    typename map_array_t<T, I, num_dim>::index_type idxA, idxB;
+
+    T Aij, Bjk, Cik, value;
+    I arr[num_dim];
+    for (itA = A->begin_nonzero(); itA != A->end_nonzero(); ++itA){
+        Aij = itA->second - A->fill_value();
+        idxA = itA->first;
+        arr[0] = idxA[0];
+        for(itB = B->begin_nonzero(); itB != B->end_nonzero(); ++itB){
+            idxB = itB->first;
+            if( idxA[1] != idxB[0])
+                continue;                       // XXX row/column_iterators?
+
+            Bjk = itB->second - B->fill_value();
+            arr[1] = idxB[1];
+            typename map_array_t<T, I, num_dim>::index_type idx(arr);
+            Cik = this->get_one(idx);
+            value = alpha*Aij*Bjk + beta*Cik;
+            this->set_one(idx, value);
+        }
+    }
 }
 
 
@@ -226,18 +346,18 @@ map_array_t<T, I, num_dim>::set_shape(const index_type& shp)
 /* Flat index to an array. C order, 2D only.
  */
 template<typename T, typename I, size_t num_dim>
-inline single_index_type
+inline I
 map_array_t<T, I, num_dim>::_flat_index(const typename map_array_t<T, I, num_dim>::index_type& index) const
 {
     assert(num_dim == 2);
-    single_index_type stride = shape_[1];
+    I stride = shape_[1];
     return index[0]*stride + index[1];
 }
 
 
 template<typename T, typename I, size_t num_dim>
 inline void
-map_array_t<T, I, num_dim>::todense(void* dest, const single_index_type num_elem) const
+map_array_t<T, I, num_dim>::todense(void* dest, const I num_elem) const
 {
     if (num_elem < 0){ throw std::runtime_error("num_elem < 0"); }
     if (num_elem == 0){ return; }
@@ -249,7 +369,7 @@ map_array_t<T, I, num_dim>::todense(void* dest, const single_index_type num_elem
     // fill nonzero elements
     map_array_t<T, I, num_dim>::iter_nonzero_type it = begin_nonzero();
     for(; it != end_nonzero(); ++it){
-        single_index_type idx = _flat_index(it->first);
+        I idx = _flat_index(it->first);
         assert(idx < num_elem);
         _dest[idx] = it->second;
     }
@@ -257,7 +377,6 @@ map_array_t<T, I, num_dim>::todense(void* dest, const single_index_type num_elem
 
 
 // TODO:  
-//        2. boolean ops a la numpy: return map_array_t of booleans (allocation!)
 //        4. slicing
 //        5. special-case zero fill_value (memset, also matmul?)
 //        6. flat indexing for d != 2

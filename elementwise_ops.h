@@ -9,6 +9,8 @@
 
 namespace sparray{
 
+typedef unsigned char npy_bool_t;   // XXX
+
 template<typename T>
 T linear_unary_op(T x, T a, T b){
     return a*x + b;
@@ -30,6 +32,40 @@ T linear_binary_op(T x, T y, T a, T b){
 template<typename T>
 T mul_binary_op(T x, T y, T a, T b){
     return a*x*y + b;
+}
+
+
+//////// COMPARISONS /////////////
+
+template<typename S>
+npy_bool_t equal(S x, S y){
+    return x == y ? 1 : 0;
+}
+
+template<typename S>
+npy_bool_t less_equal(S x, S y){
+    return x <= y ? 1 : 0;
+}
+
+template<typename S>
+npy_bool_t greater_equal(S x, S y){
+    return x >= y ? 1 : 0;
+}
+
+
+template<typename S>
+npy_bool_t not_equal(S x, S y){
+    return x != y ? 1 : 0;
+}
+
+template<typename S>
+npy_bool_t less(S x, S y){
+    return x < y ? 1 : 0;
+}
+
+template<typename S>
+npy_bool_t greater(S x, S y){
+    return x > y ? 1 : 0;
 }
 
 
