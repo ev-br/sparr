@@ -6,6 +6,9 @@
 
 #define NDIM 2
 
+template<typename T> 
+T trivial_func(T x){ return x; }
+
 
 int main(){
 
@@ -70,12 +73,12 @@ int main(){
 
         std::cout << ma << "\n";
 
-        ma.inplace_unary_op(linear_unary_op<double>, 1., 1.);
+        ma.inplace_unary(trivial_func<double>, 1., 1.);
         std::cout << ma << "\n";
 
         // check that there's no aliasing
         map_array_t<double> ma2(ma);
-        ma2.inplace_unary_op(power_unary_op<double>, 1., 2.);
+        ma2.inplace_unary(trivial_func<double>, 1., 2.);
 
         std::cout << " res = " << ma2 << "\n";
         std::cout << " orig= " << ma << "\n";
@@ -127,9 +130,8 @@ int main(){
         std::cout << ma << "\n";
         std::cout << rhs << "\n";
 
-        ma.inplace_binary_op(linear_binary_op<double>, &rhs, 1., 1.);
+        ma.inplace_binop(add<double>, &rhs);
 
-        std::cout << "__iadd__: \n" << ma << "\n";
 
     }
 

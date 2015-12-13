@@ -69,14 +69,22 @@ cdef extern from "sp_map.h" namespace "sparray":
 
         void todense(void* dest, const single_index_type num_elem) except +
 
-        void inplace_unary_op(T (*fptr)(T x, T a, T b), T a, T b)  # x <- f(x, a, b)
-        void inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
-                               const map_array_t[T] *p_other, T a, T b) except +  # x <- f(x, y, a, b)
+        # $x <- alpha f(x) + beta x$
+        # default is alpha=1 and beta=0
+        void inplace_unary(T (*op)(T x))
+        void inplace_unary(T (*op)(T x), const T alpha, const T beta)
 
+        # $x <- alpha f(x, y) + beta x$, \foreach x in self, \foreach y in other
+        void inplace_binop(T (*binop)(T x, T y),
+                           const map_array_t[T] *other) except +
+        void inplace_binop(T (*binop)(T x, T y),
+                           const map_array_t[T] *other,
+                           const T alpha, const T beta) except +
+
+        # $z <- binop(x, y)$ \foreach x in arg1, \foreach y in arg2
         void apply_binop[S](T (*binop)(S x, S y),
-                         const map_array_t[S] *first,
-                         const map_array_t[S] *second) except +;  # z[i] <- f(x[i], y[i]) for z in self, 
-                                                                  #   x in first, y in second
+                         const map_array_t[S] *arg1,
+                         const map_array_t[S] *arg2) except +;
 
         # follow the BLAS's convention: *gemm(alpha, A, B, beta, C) for
         # c <- alpha A @ B + beta C
@@ -87,10 +95,8 @@ cdef extern from "sp_map.h" namespace "sparray":
 
 
 cdef extern from "elementwise_ops.h" namespace "sparray":
-    T linear_unary_op[T](T, T, T)
-    T power_unary_op[T](T, T, T)
-    T linear_binary_op[T](T, T, T, T)
-    T mul_binary_op[T](T, T, T, T)
+    T add[T](T, T)
+    T mul[T](T, T)
 
     npy_bool equal[S](S, S)
     npy_bool less_equal[S](S, S)
@@ -526,8 +532,7 @@ def _iadd_impl(MapArray self not None, MapArray other not None):
     # dispatch
     {{for NUM, CT in zip(TNUMS, CTYPES)}}
     if self.typenum == {{NUM}}:
-        self.p.{{CT}}_ptr.inplace_binary_op(linear_binary_op[{{CT}}],
-                                            (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>1)
+        self.p.{{CT}}_ptr.inplace_binop(add[{{CT}}], other.p.{{CT}}_ptr)
         return self
     {{endfor}}
     return NotImplemented
@@ -559,8 +564,7 @@ def _imul_impl(MapArray self, MapArray other):
     # dispatch
     {{for NUM, CT in zip(TNUMS, CTYPES)}}
     if self.typenum == {{NUM}}:
-        self.p.{{CT}}_ptr.inplace_binary_op(mul_binary_op[{{CT}}],
-                                            (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>0)
+        self.p.{{CT}}_ptr.inplace_binop(mul[{{CT}}], other.p.{{CT}}_ptr)
         return self
     {{endfor}}
     return NotImplemented
