@@ -72,11 +72,9 @@ struct map_array_t
                                           const map_array_t<S, I, num_dim>* arg1,
                                           const map_array_t<S, I, num_dim>* arg2);
 
-    // GEMM: C <- alpha A @ B + beta C 
-    void inplace_gemm(const T alpha,
-                      const map_array_t<T, I, num_dim>* A,
-                      const map_array_t<T, I, num_dim>* B,
-                      const T beta);
+    // Matrix multiplication: C <- A @ B
+    void apply_mmul(const map_array_t<T, I, num_dim>* A,
+                    const map_array_t<T, I, num_dim>* B);
 
     private:
         map_type data_;
@@ -266,20 +264,18 @@ map_array_t<T, I, num_dim>::apply_binop(T (*binop)(S x, S y),
 
 template<typename T, typename I, size_t num_dim>
 inline void
-map_array_t<T, I, num_dim>::inplace_gemm(const T alpha,
-                                         const map_array_t<T, I, num_dim>* A,
-                                         const map_array_t<T, I, num_dim>* B,
-                                         const T beta)
+map_array_t<T, I, num_dim>::apply_mmul(const map_array_t<T, I, num_dim>* A,
+                                       const map_array_t<T, I, num_dim>* B)
 {
     if(!A)
-        throw std::invalid_argument("apply_binop: A is NULL");
+        throw std::invalid_argument("mmul: A is NULL");
     if(!B)
-        throw std::invalid_argument("apply_binop: B is NULL");
+        throw std::invalid_argument("mmul: B is NULL");
 
     assert(num_dim == 2);
 
     if(A->shape()[1] != B->shape()[0])
-        throw std::invalid_argument("GEMM: incompatible dimensions.");
+        throw std::invalid_argument("MMul: incompatible dimensions.");
 
 
     // XXX non-zero fill_values are not implemented. The result is likely
@@ -306,7 +302,7 @@ map_array_t<T, I, num_dim>::inplace_gemm(const T alpha,
             arr[1] = idxB[1];
             typename map_array_t<T, I, num_dim>::index_type idx(arr);
             Cik = this->get_one(idx);
-            value = alpha*Aij*Bjk + beta*Cik;
+            value = Aij*Bjk + Cik;
             this->set_one(idx, value);
         }
     }

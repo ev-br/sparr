@@ -523,56 +523,45 @@ class CmpDoubleInt(CmpMixin, TestCase):
     rdtype = int
 
 
-class GEMMMixin(object):
+class MMulMixin(object):
 
     def setUp(self):
         rndm = np.random.RandomState(1234)
-        arr = rndm.random_sample(size=(2, 4)) * 10
+        arr = rndm.random_sample(size=(2, 3)) * 10
         arr = arr.astype(self.dtype_a)
         self.a = MapArray.from_dense(arr)
 
-        arr1 = rndm.random_sample(size=(4, 2)) * 10
+        arr1 = rndm.random_sample(size=(3, 2)) * 10
         arr1 = arr1.astype(self.dtype_b)
         self.b = MapArray.from_dense(arr1)
 
     def test_basic(self):
         a, b = self.a, self.b
         x = MapArray()
-        x.gemm(1, a, b)
+        x.mmul(a, b)
         assert_allclose(x.todense(),
                         np.dot(a.todense(), b.todense()), atol=1e-15)
-
-    def test_alpha(self):
-        # check that alpha has an expected effect
-        a, b = self.a, self.b
-        x = MapArray()
-        x.gemm(2, a, b)
-        assert_allclose(x.todense(),
-                        np.dot(a.todense(), b.todense()) * 2, atol=1e-15)
-
-         also check beta
-        y = x.copy()
-        x.gemm(2, a, b, 3)
-        expected = 3 * y.todense() + 2 * np.dot(a.todense(), b.todense())
-        assert_allclose(x.todense(),
-                        expected, atol=1e-15)
 
     def test_incompat_dims(self):
         a, b = self.a, self.b
         b[8, 12] = -101
         with assert_raises(ValueError):
             x = MapArray()
-            x.gemm(1, a, b)
+            x.mmul(a, b)
 
 
-class TestGEMMFloat(GEMMMixin, TestCase):
+class TestMMulFloat(MMulMixin, TestCase):
     dtype_a = float
     dtype_b = float
 
-class TestGEMMFloatInt(GEMMMixin, TestCase):
+class TestMMulFloatInt(MMulMixin, TestCase):
     dtype_a = float
     dtype_b = int
 
+
+class TestMMulIntInt(MMulMixin, TestCase):
+    dtype_a = int
+    dtype_b = int
 
 
 if __name__ == "__main__":
