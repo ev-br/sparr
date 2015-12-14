@@ -106,6 +106,15 @@ class BasicMixin(object):
                         np.array([[0, 0],
                                   [0, 1]], dtype=self.dtype), atol=1e-15)
 
+    def test_from_dense(self):
+        rndm = np.random.RandomState(1234)
+        arr = rndm.random_sample(size=(2, 3)) * 10
+        arr = arr.astype(self.dtype)
+
+        m = MapArray.from_dense(arr)
+        assert_equal(m.shape, arr.shape)
+        assert_equal(m.dtype, arr.dtype)
+        assert_allclose(m.todense(), arr, atol=1e-15)
 
 class TestBasicDouble(BasicMixin, TestCase):
     dtype = float
@@ -129,15 +138,15 @@ class ArithmeticsMixin(object):
     op = operator.add
 
     def setUp(self):
-        ma = MapArray(dtype=self.dtype)
-        ma[1, 1] = 1.
-        ma[2, 4] = 2.
-        self.ma = ma
+        rndm = np.random.RandomState(1234)
+        arr = rndm.random_sample(size=(3, 5)) * 10
+        arr = arr.astype(self.dtype)
+        self.ma = MapArray.from_dense(arr)
 
-        rhs = MapArray(dtype=self.dtype)
-        rhs[2, 4] = 3.
-        rhs.fill_value = -8
-        self.rhs = rhs
+        arr1 = rndm.random_sample(size=(3, 5)) * 10
+        arr1 = arr1.astype(self.dtype)
+        self.rhs = MapArray.from_dense(arr1)
+        self.rhs.fill_value = -8
 
     def test_inplace_iop_scalar(self):
         ma1 = self.ma.copy()
@@ -348,13 +357,15 @@ class TestCasting(TestCase):
 class CmpMixin(object):
 
     def setUp(self):
-        self.lhs = MapArray(dtype=self.ldtype)
-        self.lhs[0, 1] = 1
-        self.lhs[1, 0] = 3
+        rndm = np.random.RandomState(1234)
+        arr = rndm.random_sample(size=(3, 5)) * 10
+        arr = arr.astype(self.ldtype)
+        self.lhs = MapArray.from_dense(arr)
 
-        self.rhs = MapArray(dtype=self.rdtype, fill_value=2)
-        self.rhs[0, 1] = 1
-        self.rhs[1, 0] = 5
+        arr1 = rndm.random_sample(size=(3, 5)) * 10 + 5
+        arr1 = arr1.astype(self.rdtype)
+        self.rhs = MapArray.from_dense(arr1)
+        self.rhs.fill_value = -5
 
     def test_less(self):
         # array vs array
@@ -515,12 +526,14 @@ class CmpDoubleInt(CmpMixin, TestCase):
 class GEMMMixin(object):
 
     def setUp(self):
-        self.a = MapArray(dtype=self.dtype_a)
-        self.a[3, 4] = 11
-        self.a[1, 2] = 12
-        self.a[4, 4] = 13
+        rndm = np.random.RandomState(1234)
+        arr = rndm.random_sample(size=(2, 4)) * 10
+        arr = arr.astype(self.dtype_a)
+        self.a = MapArray.from_dense(arr)
 
-        self.b = self.a.astype(self.dtype_b)
+        arr1 = rndm.random_sample(size=(4, 2)) * 10
+        arr1 = arr1.astype(self.dtype_b)
+        self.b = MapArray.from_dense(arr1)
 
     def test_basic(self):
         a, b = self.a, self.b
@@ -537,7 +550,7 @@ class GEMMMixin(object):
         assert_allclose(x.todense(),
                         np.dot(a.todense(), b.todense()) * 2, atol=1e-15)
 
-        # also check beta
+         also check beta
         y = x.copy()
         x.gemm(2, a, b, 3)
         expected = 3 * y.todense() + 2 * np.dot(a.todense(), b.todense())

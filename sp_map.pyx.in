@@ -282,6 +282,14 @@ cdef class MapArray:
         {{endfor}}
         raise TypeError("todense: never be here. dtype = " % self.dtype)        
 
+    @classmethod
+    def from_dense(cls, arr):
+        """Construct from a dense array.
+        """
+        self = MapArray(dtype=arr.dtype)
+        for idx, val in np.ndenumerate(arr):
+            self[idx] = val
+        return self
 
     ##### Single element access #####
 
