@@ -67,30 +67,42 @@ cdef extern from "sp_map.h" namespace "sparray":
         T get_one(const index_type& idx) const 
         void set_one(const index_type& idx, const T& value)
 
-        void todense(void* dest, const single_index_type num_elem) except +
+
+    cdef cppclass operations[T]:
+        void todense(const map_array_t[T] *src,
+                     void* dest,
+                     const single_index_type num_elem) except +
 
         # $x <- alpha f(x) + beta x$
         # default is alpha=1 and beta=0
-        void inplace_unary(T (*op)(T x))
-        void inplace_unary(T (*op)(T x), const T alpha, const T beta)
+        void inplace_unary(map_array_t[T] *self,
+                           T (*op)(T x))
+        void inplace_unary(map_array_t[T] *self,
+                           T (*op)(T x),
+                           const T alpha, const T beta)
 
         # $x <- alpha f(x, y) + beta x$, \foreach x in self, \foreach y in other
         void inplace_binop(T (*binop)(T x, T y),
+                           map_array_t[T] *self,
                            const map_array_t[T] *other) except +
         void inplace_binop(T (*binop)(T x, T y),
+                           map_array_t[T] *self,
                            const map_array_t[T] *other,
                            const T alpha, const T beta) except +
 
         # $z <- binop(x, y)$ \foreach x in arg1, \foreach y in arg2
         void apply_binop[S](T (*binop)(S x, S y),
+                         map_array_t[T] *self,
                          const map_array_t[S] *arg1,
-                         const map_array_t[S] *arg2) except +;
+                         const map_array_t[S] *arg2) except +
 
         # C <- A @ B
-        void apply_mmul(const map_array_t[T] *A,
+        void apply_mmul(map_array_t[T] *C,
+                        const map_array_t[T] *A,
                         const map_array_t[T] *B) except +
 
 
+# Elementary elementwise operations
 cdef extern from "elementwise_ops.h" namespace "sparray":
     T add[T](T, T)
     T mul[T](T, T)
@@ -125,6 +137,14 @@ CONDS = ['if'] + ['elif']*(len(TNUMS) - 1)
 }}
 
 
+
+# instantiate the 'operations' structs for the allowed types
+{{for CT in CTYPES}}
+cdef operations[{{CT}}] op_{{CT}}
+{{endfor}}
+
+
+# the main polymorphism kludge :-)
 cdef union union_t:
 {{for CT in CTYPES}}
     map_array_t[{{CT}}] *{{CT}}_ptr
@@ -274,7 +294,7 @@ cdef class MapArray:
             a = PyArray_SimpleNew(nd,
                                   <npy_intp*>self.p.{{CT}}_ptr.shape().elem_,
                                   {{NUM}})
-            self.p.{{CT}}_ptr.todense(PyArray_DATA(a), PyArray_SIZE(a))
+            op_{{CT}}.todense(self.p.{{CT}}_ptr, PyArray_DATA(a), PyArray_SIZE(a))
             return a
         {{endfor}}
         raise TypeError("todense: never be here. dtype = " % self.dtype)        
@@ -441,7 +461,9 @@ def _mmul_impl(MapArray self not None,
     {{for NUM, CT in zip(TNUMS, CTYPES)}}
     cdef {{CT}} {{CT}}_alpha, {{CT}}_beta
     if self.typenum == {{NUM}}:
-        self.p.{{CT}}_ptr.apply_mmul(A.p.{{CT}}_ptr, B.p.{{CT}}_ptr)
+        op_{{CT}}.apply_mmul(self.p.{{CT}}_ptr,
+                             A.p.{{CT}}_ptr,
+                             B.p.{{CT}}_ptr)
         return self
     {{endfor}}
     raise NotImplementedError
@@ -475,29 +497,35 @@ def _richcmp_impl(MapArray self not None, MapArray other not None, int op):
     {{for NUM, CT in zip(TNUMS, CTYPES)}}
     if self.typenum == {{NUM}}:
         if op == 0:
-            result.p.npy_bool_ptr.apply_binop[{{CT}}](less[{{CT}}],
-                                                     self.p.{{CT}}_ptr,
-                                                     other.p.{{CT}}_ptr)
+            op_npy_bool.apply_binop[{{CT}}](less[{{CT}}],
+                                          result.p.npy_bool_ptr,
+                                          self.p.{{CT}}_ptr,
+                                          other.p.{{CT}}_ptr)
         elif op == 1:
-            result.p.npy_bool_ptr.apply_binop[{{CT}}](less_equal[{{CT}}],
-                                                     self.p.{{CT}}_ptr,
-                                                     other.p.{{CT}}_ptr)
+            op_npy_bool.apply_binop[{{CT}}](less_equal[{{CT}}],
+                                          result.p.npy_bool_ptr,
+                                          self.p.{{CT}}_ptr,
+                                          other.p.{{CT}}_ptr)
         elif op == 2:
-            result.p.npy_bool_ptr.apply_binop[{{CT}}](equal[{{CT}}],
-                                                     self.p.{{CT}}_ptr,
-                                                     other.p.{{CT}}_ptr)
+            op_npy_bool.apply_binop[{{CT}}](equal[{{CT}}],
+                                          result.p.npy_bool_ptr,
+                                          self.p.{{CT}}_ptr,
+                                          other.p.{{CT}}_ptr)
         elif op == 3:
-            result.p.npy_bool_ptr.apply_binop[{{CT}}](not_equal[{{CT}}],
-                                                     self.p.{{CT}}_ptr,
-                                                     other.p.{{CT}}_ptr)
+            op_npy_bool.apply_binop[{{CT}}](not_equal[{{CT}}],
+                                          result.p.npy_bool_ptr,
+                                          self.p.{{CT}}_ptr,
+                                          other.p.{{CT}}_ptr)
         elif op == 4:
-            result.p.npy_bool_ptr.apply_binop[{{CT}}](greater[{{CT}}],
-                                                     self.p.{{CT}}_ptr,
-                                                     other.p.{{CT}}_ptr)
+            op_npy_bool.apply_binop[{{CT}}](greater[{{CT}}],
+                                          result.p.npy_bool_ptr,
+                                          self.p.{{CT}}_ptr,
+                                          other.p.{{CT}}_ptr)
         elif op == 5:
-            result.p.npy_bool_ptr.apply_binop[{{CT}}](greater_equal[{{CT}}],
-                                                     self.p.{{CT}}_ptr,
-                                                     other.p.{{CT}}_ptr)
+            op_npy_bool.apply_binop[{{CT}}](greater_equal[{{CT}}],
+                                          result.p.npy_bool_ptr,
+                                          self.p.{{CT}}_ptr,
+                                          other.p.{{CT}}_ptr)
         else:
             raise ValueError("sparse cmp: op = ." % op)
         return result
@@ -527,7 +555,9 @@ def _iadd_impl(MapArray self not None, MapArray other not None):
     # dispatch
     {{for NUM, CT in zip(TNUMS, CTYPES)}}
     if self.typenum == {{NUM}}:
-        self.p.{{CT}}_ptr.inplace_binop(add[{{CT}}], other.p.{{CT}}_ptr)
+        op_{{CT}}.inplace_binop(add[{{CT}}],
+                                self.p.{{CT}}_ptr,
+                                other.p.{{CT}}_ptr)
         return self
     {{endfor}}
     return NotImplemented
@@ -559,7 +589,9 @@ def _imul_impl(MapArray self, MapArray other):
     # dispatch
     {{for NUM, CT in zip(TNUMS, CTYPES)}}
     if self.typenum == {{NUM}}:
-        self.p.{{CT}}_ptr.inplace_binop(mul[{{CT}}], other.p.{{CT}}_ptr)
+        op_{{CT}}.inplace_binop(mul[{{CT}}],
+                                self.p.{{CT}}_ptr,
+                                other.p.{{CT}}_ptr)
         return self
     {{endfor}}
     return NotImplemented
