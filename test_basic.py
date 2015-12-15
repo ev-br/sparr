@@ -139,9 +139,10 @@ class ArithmeticsMixin(object):
 
     def setUp(self):
         rndm = np.random.RandomState(1234)
-        arr = rndm.random_sample(size=(3, 5)) * 10
+        arr = rndm.random_sample(size=(2, 4)) * 10
         arr = arr.astype(self.dtype)
         self.ma = MapArray.from_dense(arr)
+        self.ma[2, 4] = 1
 
         arr1 = rndm.random_sample(size=(3, 5)) * 10
         arr1 = arr1.astype(self.dtype)
