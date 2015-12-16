@@ -67,30 +67,45 @@ cdef extern from "sp_map.h" namespace "sparray":
         T get_one(const index_type& idx) const 
         void set_one(const index_type& idx, const T& value)
 
-        void todense(void* dest, const single_index_type num_elem) except +
 
-        void inplace_unary_op(T (*fptr)(T x, T a, T b), T a, T b)  # x <- f(x, a, b)
-        void inplace_binary_op(T (*fptr)(T x, T y, T a, T b),
-                               const map_array_t[T] *p_other, T a, T b) except +  # x <- f(x, y, a, b)
+    cdef cppclass operations[T]:
+        void todense(const map_array_t[T] *src,
+                     void* dest,
+                     const single_index_type num_elem) except +
 
+        # $x <- alpha f(x) + beta x$
+        # default is alpha=1 and beta=0
+        void inplace_unary(map_array_t[T] *self,
+                           T (*op)(T x))
+        void inplace_unary(map_array_t[T] *self,
+                           T (*op)(T x),
+                           const T alpha, const T beta)
+
+        # $x <- alpha f(x, y) + beta x$, \foreach x in self, \foreach y in other
+        void inplace_binop(T (*binop)(T x, T y),
+                           map_array_t[T] *self,
+                           const map_array_t[T] *other) except +
+        void inplace_binop(T (*binop)(T x, T y),
+                           map_array_t[T] *self,
+                           const map_array_t[T] *other,
+                           const T alpha, const T beta) except +
+
+        # $z <- binop(x, y)$ \foreach x in arg1, \foreach y in arg2
         void apply_binop[S](T (*binop)(S x, S y),
-                         const map_array_t[S] *first,
-                         const map_array_t[S] *second) except +;  # z[i] <- f(x[i], y[i]) for z in self, 
-                                                                  #   x in first, y in second
+                         map_array_t[T] *self,
+                         const map_array_t[S] *arg1,
+                         const map_array_t[S] *arg2) except +
 
-        # follow the BLAS's convention: *gemm(alpha, A, B, beta, C) for
-        # c <- alpha A @ B + beta C
-        void inplace_gemm(const T alpha,
-                          const map_array_t[T] *A,
-                          const map_array_t[T] *B,
-                          const T beta) except +
+        # C <- A @ B
+        void apply_mmul(map_array_t[T] *C,
+                        const map_array_t[T] *A,
+                        const map_array_t[T] *B) except +
 
 
+# Elementary elementwise operations
 cdef extern from "elementwise_ops.h" namespace "sparray":
-    T linear_unary_op[T](T, T, T)
-    T power_unary_op[T](T, T, T)
-    T linear_binary_op[T](T, T, T, T)
-    T mul_binary_op[T](T, T, T, T)
+    T add[T](T, T)
+    T mul[T](T, T)
 
     npy_bool equal[S](S, S)
     npy_bool less_equal[S](S, S)
@@ -122,6 +137,14 @@ CONDS = ['if'] + ['elif']*(len(TNUMS) - 1)
 }}
 
 
+
+# instantiate the 'operations' structs for the allowed types
+{{for CT in CTYPES}}
+cdef operations[{{CT}}] op_{{CT}}
+{{endfor}}
+
+
+# the main polymorphism kludge :-)
 cdef union union_t:
 {{for CT in CTYPES}}
     map_array_t[{{CT}}] *{{CT}}_ptr
@@ -271,11 +294,19 @@ cdef class MapArray:
             a = PyArray_SimpleNew(nd,
                                   <npy_intp*>self.p.{{CT}}_ptr.shape().elem_,
                                   {{NUM}})
-            self.p.{{CT}}_ptr.todense(PyArray_DATA(a), PyArray_SIZE(a))
+            op_{{CT}}.todense(self.p.{{CT}}_ptr, PyArray_DATA(a), PyArray_SIZE(a))
             return a
         {{endfor}}
         raise TypeError("todense: never be here. dtype = " % self.dtype)        
 
+    @classmethod
+    def from_dense(cls, arr):
+        """Construct from a dense array.
+        """
+        self = MapArray(dtype=arr.dtype)
+        for idx, val in np.ndenumerate(arr):
+            self[idx] = val
+        return self
 
     ##### Single element access #####
 
@@ -399,48 +430,40 @@ cdef class MapArray:
                              fill_value=other)
         return _richcmp_impl(self, arr_other, op)
 
-    def gemm(self, alpha, A, B, beta=0):
-        """ In-place GEMM: ``C <- alpha * A @ B + beta * C``.
+    def mmul(self, A, B):
+        """ MMul: ``C <- A @ B``.
         """
         # XXX: 1. what is sparse @ dense, densify or complain?
-        #      2. scalar dtypes: upcast arrays or downcast scalars?
-        #               e.g., double scalar times int array.
         if not isinstance(A, MapArray) or not isinstance(B, MapArray):
-            raise NotImplementedError("Gemm only handles sparse arrays.")
+            raise NotImplementedError("MMul only handles sparse arrays.")
 
         if A.fill_value != 0 or B.fill_value != 0:
             raise NotImplementedError("The result is likely dense.")
 
         # modify self in-place (hence swallow the return value)
-        _gemm_impl(self, alpha, A, B, beta)
+        _mmul_impl(self, A, B)
 
 ##### implementations
 
-def _gemm_impl(MapArray self not None,
-               alpha,
+def _mmul_impl(MapArray self not None,
                MapArray A not None,
-               MapArray B not None,
-               beta=0):
+               MapArray B not None):
 
     # handle types
     if A.dtype != self.dtype:
         AA = A.astype(self.dtype)
-        return _gemm_impl(self, alpha, AA, B, beta)
+        return _mmul_impl(self, AA, B)
     if B.dtype != self.dtype:
         BB = B.astype(self.dtype)
-        return _gemm_impl(self, alpha, A, BB, beta)
+        return _mmul_impl(self, A, BB)
 
     # by now all arrays are of the same dtype, might need to cast scalars still.
     {{for NUM, CT in zip(TNUMS, CTYPES)}}
     cdef {{CT}} {{CT}}_alpha, {{CT}}_beta
     if self.typenum == {{NUM}}:
-        # Cython syntax: <double?>(alpha) raises TypeError if the cast fails
-        {{CT}}_alpha = <{{CT}}?>(alpha)
-        {{CT}}_beta = <{{CT}}?>(beta)
-        self.p.{{CT}}_ptr.inplace_gemm({{CT}}_alpha,
-                                       A.p.{{CT}}_ptr,
-                                       B.p.{{CT}}_ptr,
-                                       {{CT}}_beta)
+        op_{{CT}}.apply_mmul(self.p.{{CT}}_ptr,
+                             A.p.{{CT}}_ptr,
+                             B.p.{{CT}}_ptr)
         return self
     {{endfor}}
     raise NotImplementedError
@@ -474,29 +497,35 @@ def _richcmp_impl(MapArray self not None, MapArray other not None, int op):
     {{for NUM, CT in zip(TNUMS, CTYPES)}}
     if self.typenum == {{NUM}}:
         if op == 0:
-            result.p.npy_bool_ptr.apply_binop[{{CT}}](less[{{CT}}],
-                                                     self.p.{{CT}}_ptr,
-                                                     other.p.{{CT}}_ptr)
+            op_npy_bool.apply_binop[{{CT}}](less[{{CT}}],
+                                          result.p.npy_bool_ptr,
+                                          self.p.{{CT}}_ptr,
+                                          other.p.{{CT}}_ptr)
         elif op == 1:
-            result.p.npy_bool_ptr.apply_binop[{{CT}}](less_equal[{{CT}}],
-                                                     self.p.{{CT}}_ptr,
-                                                     other.p.{{CT}}_ptr)
+            op_npy_bool.apply_binop[{{CT}}](less_equal[{{CT}}],
+                                          result.p.npy_bool_ptr,
+                                          self.p.{{CT}}_ptr,
+                                          other.p.{{CT}}_ptr)
         elif op == 2:
-            result.p.npy_bool_ptr.apply_binop[{{CT}}](equal[{{CT}}],
-                                                     self.p.{{CT}}_ptr,
-                                                     other.p.{{CT}}_ptr)
+            op_npy_bool.apply_binop[{{CT}}](equal[{{CT}}],
+                                          result.p.npy_bool_ptr,
+                                          self.p.{{CT}}_ptr,
+                                          other.p.{{CT}}_ptr)
         elif op == 3:
-            result.p.npy_bool_ptr.apply_binop[{{CT}}](not_equal[{{CT}}],
-                                                     self.p.{{CT}}_ptr,
-                                                     other.p.{{CT}}_ptr)
+            op_npy_bool.apply_binop[{{CT}}](not_equal[{{CT}}],
+                                          result.p.npy_bool_ptr,
+                                          self.p.{{CT}}_ptr,
+                                          other.p.{{CT}}_ptr)
         elif op == 4:
-            result.p.npy_bool_ptr.apply_binop[{{CT}}](greater[{{CT}}],
-                                                     self.p.{{CT}}_ptr,
-                                                     other.p.{{CT}}_ptr)
+            op_npy_bool.apply_binop[{{CT}}](greater[{{CT}}],
+                                          result.p.npy_bool_ptr,
+                                          self.p.{{CT}}_ptr,
+                                          other.p.{{CT}}_ptr)
         elif op == 5:
-            result.p.npy_bool_ptr.apply_binop[{{CT}}](greater_equal[{{CT}}],
-                                                     self.p.{{CT}}_ptr,
-                                                     other.p.{{CT}}_ptr)
+            op_npy_bool.apply_binop[{{CT}}](greater_equal[{{CT}}],
+                                          result.p.npy_bool_ptr,
+                                          self.p.{{CT}}_ptr,
+                                          other.p.{{CT}}_ptr)
         else:
             raise ValueError("sparse cmp: op = ." % op)
         return result
@@ -526,8 +555,9 @@ def _iadd_impl(MapArray self not None, MapArray other not None):
     # dispatch
     {{for NUM, CT in zip(TNUMS, CTYPES)}}
     if self.typenum == {{NUM}}:
-        self.p.{{CT}}_ptr.inplace_binary_op(linear_binary_op[{{CT}}],
-                                            (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>1)
+        op_{{CT}}.inplace_binop(add[{{CT}}],
+                                self.p.{{CT}}_ptr,
+                                other.p.{{CT}}_ptr)
         return self
     {{endfor}}
     return NotImplemented
@@ -559,8 +589,9 @@ def _imul_impl(MapArray self, MapArray other):
     # dispatch
     {{for NUM, CT in zip(TNUMS, CTYPES)}}
     if self.typenum == {{NUM}}:
-        self.p.{{CT}}_ptr.inplace_binary_op(mul_binary_op[{{CT}}],
-                                            (<MapArray>other).p.{{CT}}_ptr, <{{CT}}>1, <{{CT}}>0)
+        op_{{CT}}.inplace_binop(mul[{{CT}}],
+                                self.p.{{CT}}_ptr,
+                                other.p.{{CT}}_ptr)
         return self
     {{endfor}}
     return NotImplemented

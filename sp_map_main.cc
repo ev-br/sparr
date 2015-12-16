@@ -6,6 +6,9 @@
 
 #define NDIM 2
 
+template<typename T> 
+T trivial_func(T x){ return x; }
+
 
 int main(){
 
@@ -60,7 +63,7 @@ int main(){
     // in-place elementwise operations
 
     {
-        std::cout <<"\n\n******\n";
+        std::cout <<"\n\n******  unary\n";
         map_array_t<double> ma;
         single_index_type a[NDIM] = {3, 4};
         ma.set_one(a, 101.);
@@ -70,12 +73,16 @@ int main(){
 
         std::cout << ma << "\n";
 
-        ma.inplace_unary_op(linear_unary_op<double>, 1., 1.);
+        operations<double> ops;
+
+        ops.inplace_unary(&ma, trivial_func<double>, 1., 1.);
+        //ma.inplace_unary(trivial_func<double>, 1., 1.);
         std::cout << ma << "\n";
 
         // check that there's no aliasing
         map_array_t<double> ma2(ma);
-        ma2.inplace_unary_op(power_unary_op<double>, 1., 2.);
+        ops.inplace_unary(&ma, trivial_func<double>, 1., 2.);
+        //ma2.inplace_unary(trivial_func<double>, 1., 2.);
 
         std::cout << " res = " << ma2 << "\n";
         std::cout << " orig= " << ma << "\n";
@@ -98,11 +105,13 @@ int main(){
                 value += 1.;
             }
         }
-        std::cout << "\n*****************\n";
+        std::cout << "\n***************** todense\n";
         std::cout << ma << "\n";
 
+        operations<double> ops;
+
         std::vector<double> v(m*n);
-        ma.todense(&v[0], v.size());
+        ops.todense(&ma, &v[0], v.size());
         for(size_t j=0; j<v.size(); ++j){
             std::cout << v[j] << ", ";
         }
@@ -127,9 +136,9 @@ int main(){
         std::cout << ma << "\n";
         std::cout << rhs << "\n";
 
-        ma.inplace_binary_op(linear_binary_op<double>, &rhs, 1., 1.);
+        operations<double> ops;
+        ops.inplace_binop(add<double>, &ma, &rhs);
 
-        std::cout << "__iadd__: \n" << ma << "\n";
 
     }
 
