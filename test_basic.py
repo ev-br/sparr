@@ -117,6 +117,24 @@ class BasicMixin(object):
         assert_equal(m.dtype, arr.dtype)
         assert_allclose(m.todense(), arr, atol=1e-15)
 
+    def test_indexing(self):
+        ma = MapArray(dtype=self.dtype)
+        val = self.dtype(2)
+        ma[2, 2] = val
+        assert_equal(ma[2, 2], val)
+        assert_equal(ma[-1, 2], val)
+        assert_equal(ma[-2, 2], ma.fill_value)
+
+        with assert_raises(IndexError):
+            ma[-4, 2]
+
+        with assert_raises(TypeError):
+            ma['enikibeniki']
+
+        with assert_raises(TypeError):
+            ma[1]
+
+
 class TestBasicDouble(BasicMixin, TestCase):
     dtype = float
 
