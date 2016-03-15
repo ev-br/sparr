@@ -104,6 +104,7 @@ cdef extern from "sp_map.h" namespace "sparray":
 cdef extern from "elementwise_ops.h" namespace "sparray":
     T add[T](T, T)
     T mul[T](T, T)
+    T sub[T](T, T)
 
     npy_bool equal[S](S, S)
     npy_bool less_equal[S](S, S)
@@ -334,7 +335,6 @@ cdef class MapArray:
             self.p.{{CT}}_ptr.set_one(idx, value)
         {{endfor}}
         elif self.typenum == cnp.NPY_BOOL:
-            # FIXME
             ival = PyObject_IsTrue(value)
             if ival == -1:
                 raise ValueError("Cannot interpet %s as a boolean" % value)
@@ -344,10 +344,9 @@ cdef class MapArray:
 
     ###### Arithmetics #######
 
-    # TODO: 
-    #        3. add more arithm ops: sub, div, l/r shifts, mod etc
+    # XXX maybe add more arithm ops: div, l/r shifts, mod etc
 
-    {{for op, symb in zip(["add", "mul"], ["+", "*"])}}
+    {{for op, symb in zip(["add", "mul", "sub"], ["+", "*", "-"])}}
     def __i{{op}}__(MapArray self not None, other):
         if isinstance(other, np.ndarray): 
             # hand over to __{{op}}__ for densification
@@ -371,11 +370,17 @@ cdef class MapArray:
             else:
                 newobj = self.copy()
                 return newobj.__i{{op}}__(other)
-        elif isinstance(other, MapArray):
-            return other.__{{op}}__(self)
         else:
-            # how come?
-            raise RuntimeError("__{{op}}__ : never be here ", self, other)
+            # other must be a MapArray
+            if isinstance(self, np.ndarray):
+                return self {{symb}} other.todense()
+
+            # else, self must be a scalar
+            dt = np.asarray(self).dtype     # XXX there must be a more direct way
+            arr_self = MapArray(shape=other.shape,
+                                 dtype=dt,
+                                 fill_value=self)
+            return _i{{op}}_impl(arr_self, other)
     {{endfor}}
 
     ########### Booleans ########################
@@ -502,7 +507,7 @@ def _richcmp_impl(MapArray self not None, MapArray other not None, int op):
     {{endfor}}
 
 
-{{for op in ["add", "mul"]}}
+{{for op in ["add", "mul", "sub"]}}
 def _i{{op}}_impl(MapArray self not None, MapArray other not None):
     """ Sparse <op> sparse implementation of __i{{op}}__.
 
@@ -532,5 +537,6 @@ def _i{{op}}_impl(MapArray self not None, MapArray other not None):
     {{endfor}}
     raise NotImplementedError("_i{{op}}_: typecode %s not understood." % self.typenum)
 {{endfor}}
+
 
 cnp.import_array()
