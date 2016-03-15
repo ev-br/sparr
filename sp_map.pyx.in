@@ -33,7 +33,7 @@
 import numpy as np
 cimport numpy as cnp
 from numpy cimport PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE, npy_intp, npy_bool
-
+from cpython.object cimport PyObject_IsTrue
 
 cdef extern from "fixed_cap.h" namespace "sparray":
     cdef cppclass fixed_capacity[I]:
@@ -123,17 +123,15 @@ cdef index_type index_from_tuple(tuple tpl):
     return idx
 
 
-cdef object convert_io(object value, int typenum):
-    # XXX: this should probably be moved to C++ level
-    if typenum == cnp.NPY_BOOL:
-        return (value != 0)
-    return value
+{{py:
+CTYPES_GEN = ['long', 'float', 'double']
+TNUMS_GEN = ['cnp.NPY_LONG', 'cnp.NPY_FLOAT', 'cnp.NPY_DOUBLE']
+CONDS_GEN = ['if'] + ['elif']*(len(TNUMS_GEN) - 1)
 
-
-{{py: 
-CTYPES = ['npy_bool', 'long', 'float', 'double']
-TNUMS = ['cnp.NPY_BOOL', 'cnp.NPY_LONG', 'cnp.NPY_FLOAT', 'cnp.NPY_DOUBLE']
-CONDS = ['if'] + ['elif']*(len(TNUMS) - 1)
+# add types which need special casing (eg get/set)
+CTYPES = CTYPES_GEN + ['npy_bool']
+TNUMS = TNUMS_GEN + ['cnp.NPY_BOOL']
+CONDS = CONDS_GEN + ['elif']
 }}
 
 
@@ -212,18 +210,26 @@ cdef class MapArray:
 
     property fill_value:
         def __get__(self):
-            {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
+            {{for NUM, C, IF in zip(TNUMS_GEN, CTYPES_GEN, CONDS_GEN)}}
             {{IF}} self.typenum == {{NUM}}:
-                return convert_io(self.p.{{C}}_ptr.fill_value(), self.typenum)
+                return self.p.{{C}}_ptr.fill_value()
             {{endfor}}
+            elif self.typenum == cnp.NPY_BOOL:
+                return self.p.npy_bool_ptr.fill_value() != 0
             else:
                 raise TypeError("fill_value: dtype = %s unhandled." % self.dtype)
 
         def __set__(self, value):
-            {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
+            cdef int ival
+            {{for NUM, C, IF in zip(TNUMS_GEN, CTYPES_GEN, CONDS_GEN)}}
             {{IF}} self.typenum == {{NUM}}:
-                self.p.{{C}}_ptr.set_fill_value(convert_io(value, self.typenum))
+                self.p.{{C}}_ptr.set_fill_value(value)
             {{endfor}}
+            elif self.typenum == cnp.NPY_BOOL:
+                ival = PyObject_IsTrue(value)
+                if ival == -1:
+                    raise ValueError("Cannot interpet %s as a boolean" % value)
+                self.p.npy_bool_ptr.set_fill_value(ival)
             else:
                 raise TypeError("fill_value: dtype = %s unhandled." % self.dtype)
 
@@ -314,19 +320,28 @@ cdef class MapArray:
         # 2D is hardcoded; no slicing; no input validation
         cdef index_type idx = index_from_tuple(tpl)
 
-        {{for NUM, CT in zip(TNUMS, CTYPES)}}
+        {{for NUM, CT in zip(TNUMS_GEN, CTYPES_GEN)}}
         if self.typenum == {{NUM}}:
-            return convert_io(self.p.{{CT}}_ptr.get_one(idx), self.typenum)
+            return self.p.{{CT}}_ptr.get_one(idx)
         {{endfor}}
+        if self.typenum == cnp.NPY_BOOL:
+            return self.p.npy_bool_ptr.get_one(idx) != 0
         raise TypeError("__getitem__: dtype = %s not understood." % self.dtype)
 
     def __setitem__(self, tpl, value):
+        cdef int ival
         cdef index_type idx = index_from_tuple(tpl)
 
-        {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{for NUM, CT, IF in zip(TNUMS_GEN, CTYPES_GEN, CONDS_GEN)}}
         {{IF}} self.typenum == {{NUM}}:
-            self.p.{{CT}}_ptr.set_one(idx, convert_io(value, self.typenum))
+            self.p.{{CT}}_ptr.set_one(idx, value)
         {{endfor}}
+        elif self.typenum == cnp.NPY_BOOL:
+            # FIXME
+            ival = PyObject_IsTrue(value)
+            if ival == -1:
+                raise ValueError("Cannot interpet %s as a boolean" % value)
+            self.p.npy_bool_ptr.set_one(idx, ival)
         else:
             raise TypeError("__setitem__: dtype = %s not understood." % self.dtype)
 
