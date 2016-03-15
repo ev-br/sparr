@@ -243,11 +243,30 @@ class ArithmeticsMixin(object):
         ma1 = self.ma.copy()
         dense = self.rhs.todense()
 
-        for res in (self.op(ma1, dense),
-                    self.op(dense, ma1)):
-            assert_(isinstance(res, np.ndarray))
-            assert_allclose(res,
-                            self.op(ma1.todense(), dense), atol=1e-15)
+        res = self.op(ma1, dense)
+        assert_(isinstance(res, np.ndarray))
+        assert_allclose(res,
+                        self.op(ma1.todense(), dense), atol=1e-15)
+
+        # also check the in-place version
+        ma1 = self.ma.copy()
+        dense = self.rhs.todense()
+
+        ma1 = self.iop(ma1, dense)
+        assert_(isinstance(ma1, np.ndarray))
+        assert_allclose(ma1,
+                        self.op(self.ma.todense(), dense), atol=1e-15)
+
+    def test_dense_sparse_interop(self):
+        # dense + sparse densifies for scipy.sparse matrices.
+        # So we try to be consistent here for sparse + dense or sparse += dense
+        ma1 = self.ma.copy()
+        dense = self.rhs.todense()
+
+        res = self.op(dense, ma1)
+        assert_(isinstance(res, np.ndarray))
+        assert_allclose(res,
+                        self.op(dense, ma1.todense()), atol=1e-15)
 
         # also check the in-place version
         ma1 = self.ma.copy()
@@ -310,6 +329,27 @@ class TestMulPyInt(MulMixin, TestCase):
 class TestMulPyBool(MulMixin, TestCase):
     dtype = bool
 
+
+
+class SubMixin(ArithmeticsMixin):
+    iop = operator.isub       # x = iop(x, y) is x -= y
+    op = operator.sub
+
+
+class TestSubDouble(SubMixin, TestCase):
+    dtype = float
+
+
+class TestSubFloat(SubMixin, TestCase):
+    dtype = np.float32
+
+
+class TestSubPyInt(SubMixin, TestCase):
+    dtype = int
+
+
+#class TestSubPyBool(SubMixin, TestCase):
+#    dtype = bool
 
 
 class TestCasting(TestCase):

@@ -21,6 +21,10 @@ T mul(T x, T y){
     return x*y;
 }
 
+template<typename T>
+T sub(T x, T y){
+    return x - y;
+}
 
 //////// COMPARISONS /////////////
 
