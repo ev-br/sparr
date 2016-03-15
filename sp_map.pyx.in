@@ -5,7 +5,6 @@
 ### TODO:
 #  1. expose dimensionality template param
 #  2. need to expose iterators to sp_map_t?
-#  4. check arg not None
 #  5. translate all C++ exceptions
 #  6. int types between C++ and Cy, esp int, npy_intp etc
 #  7. slices
@@ -17,7 +16,6 @@
 #  11. add more tests for mixed binops
 #  12. add tests with NAN and INF, where supported
 #
-#  7. construct from_dense
 #  8. add more binops (__mul__) & make them cast a la __add__
 #  9. add matmul and operator @
 #  10. add more Py types
@@ -27,13 +25,13 @@
 #  Minor quibbles:
 #  1. access to elements of fixed_capacity: operator[] or ELEM macro
 #  2. how to keep typedefs in sync between Cy and C++
-#  3. avoid having a CMD string substitution
 #  4. special-case dtypes on the C++ template level (npy_bool, npy_complex?)
 
 import numpy as np
 cimport numpy as cnp
 from numpy cimport PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE, npy_intp, npy_bool
-from cpython.object cimport PyObject_IsTrue
+from cpython.object cimport PyObject_IsTrue, PyObject_RichCompare
+
 
 cdef extern from "fixed_cap.h" namespace "sparray":
     cdef cppclass fixed_capacity[I]:
@@ -133,7 +131,6 @@ CTYPES = CTYPES_GEN + ['npy_bool']
 TNUMS = TNUMS_GEN + ['cnp.NPY_BOOL']
 CONDS = CONDS_GEN + ['elif']
 }}
-
 
 
 # instantiate the 'operations' structs for the allowed types
@@ -303,7 +300,7 @@ cdef class MapArray:
             op_{{CT}}.todense(self.p.{{CT}}_ptr, PyArray_DATA(a), PyArray_SIZE(a))
             return a
         {{endfor}}
-        raise TypeError("todense: never be here. dtype = " % self.dtype)        
+        raise TypeError("todense: never be here. dtype = " % self.dtype)
 
     @classmethod
     def from_dense(cls, arr):
@@ -351,7 +348,6 @@ cdef class MapArray:
     #        3. add more arithm ops: sub, mul, div, l/r shifts, mod etc
 
     def __iadd__(MapArray self not None, other):
-
         if isinstance(other, np.ndarray): 
             # hand over to __add__ for densification
             return NotImplemented
@@ -381,7 +377,6 @@ cdef class MapArray:
             raise RuntimeError("__add__ : never be here ", self, other)
 
     def __imul__(MapArray self not None, other):
-
         if isinstance(other, np.ndarray): 
             # hand over to __mul__ for densification
             return NotImplemented
@@ -414,26 +409,12 @@ cdef class MapArray:
 
     def __richcmp__(self, other, int op):
         if not isinstance(self, MapArray):
-            # __richcmp__ seems to sort out reversed ops ( $1 < m$ -> $m >= 1$ )
+            # __richcmp__ seems to sort out reversed ops ($1 < m$ -> $m >= 1$)
             # automagically
             raise ValueError("__richcmp__: %s %s %s" % (self, other, op))
 
         if isinstance(other, np.ndarray):
-            # XXX <object>ndarray must have __richcmp__ or something
-            if op == 0:
-                return self.todense() < other
-            elif op == 1:
-                return self.todense() <= other
-            elif op == 2:
-                return self.todense() == other
-            elif op == 3:
-                return self.todense() != other
-            elif op == 4:
-                return self.todense() > other
-            elif op == 5:
-                return self.todense() >= other
-            else:
-                raise ValueError("dense cmp: op = ." % op)
+            return PyObject_RichCompare(self.todense(), other, op)
 
         if isinstance(other, MapArray):
             return _richcmp_impl(self, other, op)
@@ -578,7 +559,7 @@ def _iadd_impl(MapArray self not None, MapArray other not None):
     return NotImplemented
 
 
-def _imul_impl(MapArray self, MapArray other):
+def _imul_impl(MapArray self not None, MapArray other not None):
     """ Sparse <op> sparse implementation of __imul__.
 
         Figure out the common dtype, copy if necessary. Then dispatch
@@ -588,7 +569,6 @@ def _imul_impl(MapArray self, MapArray other):
 
     """
     # figure out dtypes, copy if necessary
-    other.typenum = other.dtype.num
     if self.typenum != other.typenum:
         res_type = np.promote_types(self.dtype, other.dtype)
         if res_type.num != self.typenum:
@@ -611,6 +591,5 @@ def _imul_impl(MapArray self, MapArray other):
     {{endfor}}
     return NotImplemented
 
-            
 
 cnp.import_array()
