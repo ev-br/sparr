@@ -290,8 +290,18 @@ cdef class MapArray:
     ##### Single element access #####
 
     def __getitem__(self, tpl):
-        # 2D is hardcoded; no slicing; no input validation
+        # 2D is hardcoded; no slicing
         cdef index_type idx = index_from_tuple(tpl)
+        cdef single_index_type ii
+        {{for i in range(2)}}
+        ii = idx[{{i}}]
+        if ii < 0:
+            ii += self.shape[{{i}}]
+        if ii < 0 or ii >= self.shape[{{i}}]:
+            raise IndexError("index %s is out of bounds for axis %s with "
+                             "size %s" % (tpl[{{i}}], {{i}}, self.shape[{{j}}]))
+        idx[{{i}}] = ii
+        {{endfor}}
 
         {{for NUM, CT in zip(TNUMS_GEN, CTYPES_GEN)}}
         if self.typenum == {{NUM}}:
