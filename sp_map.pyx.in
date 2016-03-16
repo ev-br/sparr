@@ -2,31 +2,6 @@
 
 # distutils: language = c++
 
-### TODO:
-#  1. expose dimensionality template param
-#  2. need to expose iterators to sp_map_t?
-#  5. translate all C++ exceptions
-#  6. int types between C++ and Cy, esp int, npy_intp etc
-#  7. slices
-#
-#  TYPES:
-#  8. specify casting rules
-#  9. less copying in casting in binops (MapArray + MapArray)
-#  10. binops: func ptrs in inner loops are likely not good for inlining?
-#  11. add more tests for mixed binops
-#  12. add tests with NAN and INF, where supported
-#
-#  8. add more binops (__mul__) & make them cast a la __add__
-#  9. add matmul and operator @
-#  10. add more Py types
-#  12. to_csr interop
-#  13. add bitwise ops so that (1 < x) & (x < 2) works a la numpy
-#
-#  Minor quibbles:
-#  1. access to elements of fixed_capacity: operator[] or ELEM macro
-#  2. how to keep typedefs in sync between Cy and C++
-#  4. special-case dtypes on the C++ template level (npy_bool, npy_complex?)
-
 import numpy as np
 cimport numpy as cnp
 from numpy cimport PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE, npy_intp, npy_bool
