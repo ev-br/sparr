@@ -80,13 +80,13 @@ class BasicMixin(object):
                                   [1, -1, 1, 1],
                                   [1, 1, 1, 8]], dtype=self.dtype), atol=1e-15)
 
-    @skipif(True, '32 bit indices')
     def test_int_overflow(self):
         # check array size s.t. a flat index overflows the C int range
         ma = MapArray()
         j = np.iinfo(np.int32).max + 1
         ma[1, j] = 1.
-        ma.todense()
+        assert_equal(ma.count_nonzero(), 1)
+        assert_equal(ma.shape, (2, j+1))
 
     def test_copy(self):
         ma = MapArray(dtype=self.dtype)
