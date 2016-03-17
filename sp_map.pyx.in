@@ -299,7 +299,7 @@ cdef class MapArray:
             ii += self.shape[{{i}}]
         if ii < 0 or ii >= self.shape[{{i}}]:
             raise IndexError("index %s is out of bounds for axis %s with "
-                             "size %s" % (tpl[{{i}}], {{i}}, self.shape[{{j}}]))
+                             "size %s" % (tpl[{{i}}], {{i}}, self.shape[{{i}}]))
         idx[{{i}}] = ii
         {{endfor}}
 
