@@ -1,0 +1,22 @@
+# After changing this file, check it on:
+#   http://lint.travis-ci.org/
+language: python
+sudo: false
+matrix:
+  include:
+    - python: 2.7
+      env:
+        - UPGRADE=
+    - python: 3.5
+      env:
+        - UPGRADE="--upgrade"
+before_install:
+    - travis_retry pip install --install-option="--no-cython-compile" Cython>=0.23.4
+    - travis_retry pip install nose
+    - travis_retry pip install $UPGRADE numpy
+script:
+    - python -c'import numpy as np; print(np.__version__)'
+    - python setup.py build_ext -i
+    - python test_basic.py
+notifications:
+  email: false
