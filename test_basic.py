@@ -13,6 +13,11 @@ except ImportError:
         return vstr
 OLD_NUMPY = NumpyVersion(np.__version__) < '1.9.1'
 
+try:
+    from scipy import sparse
+    HAVE_SCIPY = True
+except ImportError:
+    HAVE_SCIPY = False
 
 from sp_map import MapArray
 
@@ -135,6 +140,18 @@ class BasicMixin(object):
         assert_equal(row, [1])
         assert_equal(col, [j])
         assert_equal(data, self.dtype(1))
+
+    @skipif(not HAVE_SCIPY)
+    def test_coo_matrix(self):
+        rndm = np.random.RandomState(122)
+        a = rndm.random_sample(size=(8, 8))
+        coom = sparse.coo_matrix(a)
+
+        m = MapArray.from_dense(a)
+        data, (row, col) = m.to_coo()
+        assert_equal(data, coom.data)
+        assert_equal(row, coom.row)
+        assert_equal(col, coom.col)
 
     def test_indexing(self):
         ma = MapArray(dtype=self.dtype)
