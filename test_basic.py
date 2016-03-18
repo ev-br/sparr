@@ -153,6 +153,15 @@ class BasicMixin(object):
         assert_equal(row, coom.row)
         assert_equal(col, coom.col)
 
+    def test_from_coo(self):
+        rndm = np.random.RandomState(122)
+        a = rndm.random_sample(size=(4, 4))
+        m = MapArray.from_dense(a)
+        data, (row, col) = m.to_coo()
+
+        m1 = MapArray.from_coo(data, (row, col))
+        assert_equal(m, m1)
+
     def test_indexing(self):
         ma = MapArray(dtype=self.dtype)
         val = self.dtype(2)
