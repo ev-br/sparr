@@ -45,6 +45,9 @@ cdef extern from "sp_map.h" namespace "sparray":
         void todense(const map_array_t[T] *src,
                      void* dest,
                      const single_index_type num_elem) except +
+        void to_coo(const map_array_t[T] *src,
+                    void *data, void *row, void *clmn,
+                    const single_index_type num_elem) except +
 
         # $x <- alpha f(x) + beta x$
         # default is alpha=1 and beta=0
@@ -286,6 +289,39 @@ cdef class MapArray:
         for idx, val in np.ndenumerate(arr):
             self[idx] = val
         return self
+
+    def to_coo(self):
+        """Return COO style arrays for data, rows and columns.
+
+        Returns
+        -------
+        data : ndarray
+            Non-zero values.
+        (row, col) : tuple of ndarrays
+            Indices of nonzero elements, such that 
+            ``self[row[k], col[k]] = data[k]``.
+
+        Notes
+        -----
+        This function ignores the `fill_value`.
+
+        """
+        cdef npy_intp[1] sh
+        cdef cnp.ndarray row, clmn, data
+
+        {{for NUM, CT in zip(TNUMS, CTYPES)}}
+        if self.typenum == {{NUM}}:
+            sh[0] = <npy_intp>self.p.{{CT}}_ptr.count_nonzero()
+            row = PyArray_SimpleNew(1, sh, cnp.NPY_INTP)   # XXX: int32 indices?
+            clmn = PyArray_SimpleNew(1, sh, cnp.NPY_INTP)
+            data = PyArray_SimpleNew(1, sh, {{NUM}})
+            op_{{CT}}.to_coo(self.p.{{CT}}_ptr,
+                             PyArray_DATA(data),
+                             PyArray_DATA(row),
+                             PyArray_DATA(clmn),
+                             PyArray_SIZE(data))
+            return data, (row, clmn)
+        {{endfor}}
 
     ##### Single element access #####
 
