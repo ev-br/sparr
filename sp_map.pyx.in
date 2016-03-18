@@ -323,6 +323,28 @@ cdef class MapArray:
             return data, (row, clmn)
         {{endfor}}
 
+    @classmethod
+    def from_coo(cls, data, row_col):
+        """Construct from a COO style triplet of arrays.
+
+        Given three 1D arrays, `data`, `row` and `col`, return a MapArray
+        instance ``m`` such that ``m[row[k], col[k]] = data[k]`` for
+        ``k in range(n)``.
+
+        Parameters
+        ----------
+        data : array_like, shape (n, )
+            Nonzero values.
+        (row, col) :  tuple of array_likes, both shape (n,)
+            Indices of nonzero elements.
+
+        """
+        row, col = row_col
+        self = MapArray(dtype=data.dtype)
+        for val, r, c in zip(data, row, col):
+            self[r, c] = val
+        return self
+
     ##### Single element access #####
 
     def __getitem__(self, tpl):
