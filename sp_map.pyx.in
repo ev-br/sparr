@@ -126,6 +126,65 @@ cdef union union_t:
 
 
 cdef class MapArray:
+    """A DOK format sparse array.
+
+    A two-dimensional sparse array, suitable for incremental construction.
+    Inserting new elements is efficient.
+    Semantics of this object should mostly mimic the numpy array.
+
+    Parameters
+    ----------
+    shape: 2-element tuple of ints, optional
+        The shape of the array. Default is zero.
+    fill_value : scalar, optional
+        The value assumed for the missing entries. Default is zero.
+    dtype : optional
+        Default is python's float. 
+
+    Attributes
+    ----------
+    ndim
+    shape
+    dtype
+    fill_value
+    
+    Methods
+    -------
+    astype
+    copy
+    count_nonzero
+    todense
+    from_dense
+    to_coo
+    from_coo
+
+    Examples
+    --------
+    >>> from sp_map import MapArray as M
+    >>> m = M()
+    >>> m = M()
+    >>> m.shape
+    (0, 0)
+
+    Inserting new elements expands the array
+
+    >>> m[1, 2] = -101
+    >>> m.shape
+    (2, 3)
+    >>> m[0, 3] = 42
+    >>> m.shape
+    (2, 4)
+    >>> m.todense()
+    array([[   0.,    0.,    0.,   42.],
+           [   0.,    0., -101.,    0.]])
+
+    Arithmetic operations are elementwise
+
+    >>> m2 = m * m + 1
+    >>> m2.to_coo()
+    (array([  1765.,  10202.]), (array([0, 1]), array([3, 2])))
+
+    """
     cdef union_t p
     cdef int typenum
 
@@ -245,6 +304,18 @@ cdef class MapArray:
 
 
     def copy(self, dtype=None):
+        """Return a copy of self, optionally casting it to a specified dtype.
+
+        Parameters
+        ----------
+        dtype : optional
+            dtype to cast the copy to. Default is to preserve the dtype.
+
+        See Also
+        -----
+        astype
+
+        """
         if dtype is None:
             dtype = self.dtype
         newobj = MapArray(dtype=dtype)
@@ -263,10 +334,26 @@ cdef class MapArray:
         raise TypeError("copy: never be here. dtype = " % self.dtype)
 
     def astype(self, dtype):
+        """Return a copy of self, cast to a specified dtype.
+
+        Parameters
+        ----------
+        dtype : dtype to cast the copy to.
+
+        See Also
+        -----
+        copy
+
+        """
         # Syntactic sugar: .copy() preserves dtype, .astype changes it.
         return self.copy(dtype)
 
     def todense(self):
+        """Return the dense array representation of self.
+
+        Construct a 2D numpy array of matching shape, dtype and data.
+
+        """
         cdef int nd
         cdef cnp.ndarray a
 
