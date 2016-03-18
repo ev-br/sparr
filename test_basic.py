@@ -117,6 +117,25 @@ class BasicMixin(object):
         assert_equal(m.dtype, arr.dtype)
         assert_allclose(m.todense(), arr, atol=1e-15)
 
+    def test_co_coo(self):
+        m = MapArray(dtype=self.dtype)
+        m[1, 2] = self.dtype(11)
+        m[0, 0] = self.dtype(22)
+
+        data, (row, col) = m.to_coo()
+        assert_equal(row, [0, 1])
+        assert_equal(col, [0, 2])
+        assert_equal(data, [self.dtype(22), self.dtype(11)])
+
+    def test_to_coo_int32_overflow(self):
+        ma = MapArray(dtype=self.dtype)
+        j = np.iinfo(np.int32).max + 1
+        ma[1, j] = self.dtype(1)
+        data, (row, col) = ma.to_coo()
+        assert_equal(row, [1])
+        assert_equal(col, [j])
+        assert_equal(data, self.dtype(1))
+
     def test_indexing(self):
         ma = MapArray(dtype=self.dtype)
         val = self.dtype(2)

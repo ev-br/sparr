@@ -75,6 +75,12 @@ struct operations
                  void* dest,
                  const I num_elem);
 
+    // convert to a COO triplet of (data, row, column) arrays.
+    // Caller's responsible for allocating memory.
+    void to_coo(const map_array_t<T, I, num_dim>* src,
+                void* data, void* row, void* clmn,
+                const I num_elem);
+
     // x <- alpha f(x) + beta x
     void inplace_unary(map_array_t<T, I, num_dim> *self,
                        T (*op)(T x),
@@ -222,6 +228,46 @@ operations<T, I, num_dim>::todense(const map_array_t<T, I, num_dim>* src,
         I idx = src->_flat_index(it->first);
         assert(idx < num_elem);
         _dest[idx] = it->second;
+    }
+}
+
+
+template<typename T, typename I, size_t num_dim>
+inline void
+operations<T, I, num_dim>::to_coo(const map_array_t<T, I, num_dim>* src,
+                                  void* data, void* row, void* clmn,
+                                  const I num_elem)
+{
+    assert(num_dim == 2);
+
+    if (!src){ throw std::invalid_argument("to_coo: src is NULL."); }
+
+    if (!data)
+        throw std::invalid_argument("to_coo: data is NULL.");
+    T *_data = static_cast<T*>(data);
+
+    if (!row)
+        throw std::invalid_argument("to_coo: row is NULL.");
+    I *_row = static_cast<I*>(row);
+
+    if (!clmn)
+        throw std::invalid_argument("to_coo: clmn is NULL.");
+    I *_clmn = static_cast<I*>(clmn);
+
+    if (num_elem < 0)
+        throw std::runtime_error("num_elem < 0");
+    if (num_elem == 0){ return; }
+
+    typename map_array_t<T, I, num_dim>::index_type idx;
+    typename map_array_t<T, I, num_dim>::const_iterator it = src->begin();
+    I j = 0;
+    for(; it != src->end(); ++it){
+        assert(j < num_dim);
+        idx = it->first;
+        _data[j] = it->second;
+        _row[j] = idx[0];
+        _clmn[j] = idx[1];
+        j += 1;
     }
 }
 
