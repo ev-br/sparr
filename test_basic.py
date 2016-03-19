@@ -628,6 +628,8 @@ class CmpDoubleInt(CmpMixin, TestCase):
     rdtype = int
 
 
+HAVE_MATMUL = hasattr(operator, 'matmul')
+
 class MMulMixin(object):
 
     def setUp(self):
@@ -640,19 +642,44 @@ class MMulMixin(object):
         arr1 = arr1.astype(self.dtype_b)
         self.b = MapArray.from_dense(arr1)
 
+    @skipif(not HAVE_MATMUL)
     def test_basic(self):
         a, b = self.a, self.b
-        x = MapArray()
-        x.mmul(a, b)
+        x = eval("a @ b")
+        assert_equal(x.dtype,
+                     np.promote_types(a.dtype, b.dtype))
         assert_allclose(x.todense(),
                         np.dot(a.todense(), b.todense()), atol=1e-15)
 
+    @skipif(not HAVE_MATMUL)
+    def test_sparse_dense(self):
+        # sparse @ dense -> dense
+        a, b = self.a, self.b.todense()
+        x = eval("a @ b")
+        assert_(isinstance(x, np.ndarray))
+        assert_equal(x.dtype,
+                     np.promote_types(a.dtype, b.dtype))
+        assert_allclose(x,
+                        np.dot(a.todense(), b), atol=1e-15)
+
+    @skipif(not HAVE_MATMUL)
+    def test_dense_sparse(self):
+        # dense @ sparse -> dense
+        a, b = self.a.todense(), self.b
+        x = eval("a @ b")
+        assert_(isinstance(x, np.ndarray))
+        assert_equal(x.dtype,
+                     np.promote_types(a.dtype, b.dtype))
+        assert_allclose(x,
+                        np.dot(a, b.todense()), atol=1e-15)
+
+
+    @skipif(not HAVE_MATMUL)
     def test_incompat_dims(self):
         a, b = self.a, self.b
         b[8, 12] = -101
         with assert_raises(ValueError):
-            x = MapArray()
-            x.mmul(a, b)
+            eval("a @ b")
 
 
 class TestMMulFloat(MMulMixin, TestCase):

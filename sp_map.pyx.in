@@ -534,18 +534,27 @@ cdef class MapArray:
                              fill_value=other)
         return _richcmp_impl(self, arr_other, op)
 
-    def mmul(self, A, B):
-        """ MMul: ``C <- A @ B``.
-        """
-        # XXX: 1. what is sparse @ dense, densify or complain?
-        if not isinstance(A, MapArray) or not isinstance(B, MapArray):
-            raise NotImplementedError("MMul only handles sparse arrays.")
+    def __matmul__(self, A):
+        if isinstance(self, np.ndarray):
+            return self.__matmul__(A.todense())
+        if isinstance(A, np.ndarray):
+            return self.todense().__matmul__(A)
 
-        if A.fill_value != 0 or B.fill_value != 0:
+        if not isinstance(self, MapArray) or not isinstance(A, MapArray):
+            raise NotImplementedError("matmul only handles sparse arrays.")
+
+        if self.fill_value != 0 or A.fill_value != 0:
             raise NotImplementedError("The result is likely dense.")
 
-        # modify self in-place (hence swallow the return value)
-        _mmul_impl(self, A, B)
+        # figure out the result dtype and perform multiplication
+        dtyp = np.promote_types(self.dtype, A.dtype)
+        newobj = MapArray(dtype=dtyp)
+        _mmul_impl(newobj, self, A)
+        return newobj
+
+    def __imatmul__(self, A):
+        raise NotImplementedError("In-place matmul is not implemented. "
+                                  "Use a = a @ b instead of a @= b.")
 
 ##### implementations
 
@@ -561,9 +570,8 @@ def _mmul_impl(MapArray self not None,
         BB = B.astype(self.dtype)
         return _mmul_impl(self, A, BB)
 
-    # by now all arrays are of the same dtype, might need to cast scalars still.
+    # by now all arrays are of the same dtype
     {{for NUM, CT in zip(TNUMS, CTYPES)}}
-    cdef {{CT}} {{CT}}_alpha, {{CT}}_beta
     if self.typenum == {{NUM}}:
         op_{{CT}}.apply_mmul(self.p.{{CT}}_ptr,
                              A.p.{{CT}}_ptr,
