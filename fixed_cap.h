@@ -54,14 +54,14 @@ struct fixed_capacity_cmp
     }
 };
 
-#define FC_ELEM(fc, j) (fc).elem_[(j)]
-#define FC_ELEMS(fc) (fc).elem_
-
-
 std::string bool_outp(const bool& x){ return x ? "true" : "false"; }
 
 
 } // namespace sparray
+
+
+#define FC_ELEM(fc, j) (fc).elem_[(j)]
+#define FC_ELEMS(fc) (fc).elem_
 
 
 template<typename I, size_t num_dim>
