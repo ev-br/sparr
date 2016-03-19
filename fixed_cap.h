@@ -3,10 +3,9 @@
 #include<assert.h>
 #include<iostream>
 #include<string>
+#include"common_types.h"
 
 namespace sparray {
-
-typedef long int single_index_type;  // FIXME: npy_intp, likely Py_ssize_t
 
 
 template<typename I=single_index_type, size_t num_dim=2>
@@ -26,7 +25,8 @@ struct fixed_capacity
     fixed_capacity(const I* c_arr = NULL);  // NB: no range checking
 
 };
-// XXX: zero-initialize?
+
+typedef fixed_capacity<single_index_type, 2> index_type;
 
 
 template<typename I, size_t num_dim>

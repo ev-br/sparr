@@ -7,17 +7,13 @@ cimport numpy as cnp
 from numpy cimport PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE, npy_intp, npy_bool
 from cpython.object cimport PyObject_IsTrue, PyObject_RichCompare
 
+# Indexing type declarations
+from common_types cimport single_index_type
 
 cdef extern from "fixed_cap.h" namespace "sparray":
-    cdef cppclass fixed_capacity[I]:
-        fixed_capacity() except +
-        fixed_capacity(const I*) except +
-        I& operator[](size_t j) except +
-        long int[] elem_
-
-
-ctypedef long int single_index_type            # this needs ot be in sync w/C++
-ctypedef fixed_capacity[long int] index_type   # XXX: can't do fixed_capacity[single_index_type]
+    cdef cppclass index_type:
+        single_index_type& operator[](size_t j) except +
+        single_index_type[] elem_
 
 
 cdef extern from "sp_map.h" namespace "sparray":
