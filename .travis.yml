@@ -17,6 +17,6 @@ before_install:
 script:
     - python -c'import numpy as np; print(np.__version__)'
     - python setup.py build_ext -i
-    - python test_basic.py
+    - nosetests sparr/tests/test_basic.py 
 notifications:
   email: false
