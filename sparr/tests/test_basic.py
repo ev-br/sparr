@@ -6,6 +6,8 @@ from numpy.testing import (run_module_suite, TestCase, assert_equal, assert_,
                            assert_allclose, assert_raises,)
 from numpy.testing.decorators import knownfailureif, skipif
 
+from .. import MapArray
+
 try:
     from scipy._lib._version import NumpyVersion
 except ImportError:
@@ -18,8 +20,6 @@ try:
     HAVE_SCIPY = True
 except ImportError:
     HAVE_SCIPY = False
-
-from sp_map import MapArray
 
 
 class BasicMixin(object):

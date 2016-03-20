@@ -6,8 +6,7 @@ elementwise and ``a @ b`` is matrix multiplication.
 Usage
 -----
 
->>> from sp_map import MapArray as M
->>> m = M()
+>>> from sparr import MapArray as M
 >>> m = M()
 >>> m.shape
 (0, 0)
@@ -34,8 +33,7 @@ Arithmetic operations are elementwise
 Installation
 ------------
 
-This isn't much to package really, so it's just standard building in-place via::
-
+This isn't much to package really, so it's just very standard::
 
     $ python setup.py build_ext -i
     $ nosetests test_basic.py
