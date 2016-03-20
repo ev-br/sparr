@@ -5,3 +5,4 @@ build/*
 a.out
 #### cython output files
 *cpp
+sparr/sp_map.pyx

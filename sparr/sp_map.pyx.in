@@ -8,7 +8,7 @@ from numpy cimport PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE, npy_intp, npy_
 from cpython.object cimport PyObject_IsTrue, PyObject_RichCompare
 
 # Indexing type declarations
-from common_types cimport single_index_type
+from sparr.common_types cimport single_index_type
 
 cdef extern from "fixed_cap.h" namespace "sparray":
     cdef cppclass index_type:
