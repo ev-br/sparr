@@ -712,7 +712,6 @@ def test_bad_indexing():
     bad_indices = [
                    # numpy raises an IndexError for all of these:
                    (-4, 2),  # index is out of range
-                   (0, 4),
                    (1, 2, 3),  # too many dimensions
                    object(),   # integers. we needs them, my precious.
                    (object(),),
@@ -731,14 +730,28 @@ def test_bad_indexing():
                    (Ellipsis,),
                    (1, Ellipsis),
                    [1, 2],            # fancy indexing
+                   None,              # newaxis
+                   (None, None),
+                   (1, None),
+                   (1, 2, None),
     ]
     for idx in bad_indices:
-        yield check_bad_index, ma, idx
+        yield check_bad_index_setitem, ma, idx
+
+    # (0, 4) is out-of-bounds for getitem (setitem expands, so it's OK)
+    bad_indices.append((0, 4))
+    for idx in bad_indices:
+        yield check_bad_index_getitem, ma, idx
 
 
-def check_bad_index(ma, idx):
+def check_bad_index_getitem(ma, idx):
     with assert_raises(IndexError):
         ma[idx]
+
+
+def check_bad_index_setitem(ma, idx):
+    with assert_raises(IndexError):
+        ma[idx] = 42
 
 
 if __name__ == "__main__":
