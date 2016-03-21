@@ -105,7 +105,7 @@ class BasicMixin(object):
         assert_equal(ma1.shape, (3, 5))
         assert_allclose(ma1.todense(),
                         np.array([[0, 0, 0, 0, 0],
-                                  [0, 1, 0, 0, 0], 
+                                  [0, 1, 0, 0, 0],
                                   [0, 0, 0, 0, 3]], dtype=self.dtype), atol=1e-15)
         assert_equal(ma.shape, (2, 2))
         assert_allclose(ma.todense(),
@@ -179,6 +179,8 @@ class TestBasicPyBool(BasicMixin, TestCase):
     dtype = bool
 
 
+############################ Arithmetic binops
+
 class ArithmeticsMixin(object):
 
     iop = operator.iadd       # x = iop(x, y) is x += y
@@ -213,7 +215,7 @@ class ArithmeticsMixin(object):
             self.iop(ma1, None)
 
         with assert_raises(TypeError):
-            ress = self.iop(ma1, [1, 2, 3, 4])
+            self.iop(ma1, [1, 2, 3, 4])
 
     def test_inplace_iop_sparse(self):
         ma1 = self.ma.copy()
@@ -339,6 +341,8 @@ class ArithmeticsMixin(object):
                         self.op(ma.todense(), ma.todense()), atol=1e-15)
 
 
+############################ Addition
+
 class TestArithmDouble(ArithmeticsMixin, TestCase):
     dtype = float
 
@@ -354,6 +358,8 @@ class TestArithmPyInt(ArithmeticsMixin, TestCase):
 class TestArithmPyBool(ArithmeticsMixin, TestCase):
     dtype = bool
 
+
+############################ Multiplication
 
 class MulMixin(ArithmeticsMixin):
     iop = operator.imul       # x = iop(x, y) is x *= y
@@ -376,6 +382,7 @@ class TestMulPyBool(MulMixin, TestCase):
     dtype = bool
 
 
+############################ Subtraction
 
 class SubMixin(ArithmeticsMixin):
     iop = operator.isub       # x = iop(x, y) is x -= y
@@ -397,6 +404,8 @@ class TestSubPyInt(SubMixin, TestCase):
 #class TestSubPyBool(SubMixin, TestCase):
 #    dtype = bool
 
+
+############################ Type casting: (mostly) follow numpy
 
 class TestCasting(TestCase):
     m = MapArray(dtype=float)
@@ -441,6 +450,8 @@ class TestCasting(TestCase):
         assert_equal(m.dtype, np.dtype(float))
         assert_allclose(m.todense(), im.todense() + 1.2, atol=1e-15)
 
+
+############################ Comparisons
 
 class CmpMixin(object):
 
@@ -611,10 +622,12 @@ class CmpDoubleInt(CmpMixin, TestCase):
     rdtype = int
 
 
+############################ Matrix multiply
+
 HAVE_MATMUL = hasattr(operator, 'matmul')
 
-class MMulMixin(object):
 
+class MMulMixin(object):
     def setUp(self):
         rndm = np.random.RandomState(1234)
         arr = rndm.random_sample(size=(2, 3)) * 10
@@ -668,6 +681,7 @@ class TestMMulFloat(MMulMixin, TestCase):
     dtype_a = float
     dtype_b = float
 
+
 class TestMMulFloatInt(MMulMixin, TestCase):
     dtype_a = float
     dtype_b = int
@@ -678,7 +692,8 @@ class TestMMulIntInt(MMulMixin, TestCase):
     dtype_b = int
 
 
-######################## test indexing
+############################ Indexing
+
 def test_good_indexing():
     ma = MapArray()
     val = 2
