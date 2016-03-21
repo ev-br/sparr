@@ -162,23 +162,6 @@ class BasicMixin(object):
         m1 = MapArray.from_coo(data, (row, col))
         assert_equal(m, m1)
 
-    def test_indexing(self):
-        ma = MapArray(dtype=self.dtype)
-        val = self.dtype(2)
-        ma[2, 2] = val
-        assert_equal(ma[2, 2], val)
-        assert_equal(ma[-1, 2], val)
-        assert_equal(ma[-2, 2], ma.fill_value)
-
-        with assert_raises(IndexError):
-            ma[-4, 2]
-
-        with assert_raises(TypeError):
-            ma['enikibeniki']
-
-        with assert_raises(TypeError):
-            ma[1]
-
 
 class TestBasicDouble(BasicMixin, TestCase):
     dtype = float
@@ -673,7 +656,6 @@ class MMulMixin(object):
         assert_allclose(x,
                         np.dot(a, b.todense()), atol=1e-15)
 
-
     @skipif(not HAVE_MATMUL)
     def test_incompat_dims(self):
         a, b = self.a, self.b
@@ -694,6 +676,54 @@ class TestMMulFloatInt(MMulMixin, TestCase):
 class TestMMulIntInt(MMulMixin, TestCase):
     dtype_a = int
     dtype_b = int
+
+
+######################## test indexing
+def test_good_indexing():
+    ma = MapArray()
+    val = 2
+    ma[2, 2] = val
+    assert_equal(ma[2, 2], val)
+    assert_equal(ma[-1, 2], val)
+    assert_equal(ma[-2, 2], ma.fill_value)
+
+
+def test_bad_indexing():
+    # this is a nose test generator
+    ma = MapArray()
+    val = 2
+    ma[2, 2] = val
+
+    bad_indices = [
+                   # numpy raises an IndexError for all of these:
+                   (-4, 2),  # index is out of range
+                   (0, 4),
+                   (1, 2, 3),  # too many dimensions
+                   object(),   # integers. we needs them, my precious.
+                   (object(),),
+                   'enikibeniki',
+                   ('boobabeeboob',),
+                   (1j, 2),
+                   1.5,      # floats shall not pass
+                   (1.0, 2),
+
+                   # some of these could work. Someday.
+                   1,         # select a subarray
+                   (1,),
+                   (),        # what is it, a view
+                   (slice(None,), 1),    # assorted slices
+                   Ellipsis,
+                   (Ellipsis,),
+                   (1, Ellipsis),
+                   [1, 2],            # fancy indexing
+    ]
+    for idx in bad_indices:
+        yield check_bad_index, ma, idx
+
+
+def check_bad_index(ma, idx):
+    with assert_raises(IndexError):
+        ma[idx]
 
 
 if __name__ == "__main__":
