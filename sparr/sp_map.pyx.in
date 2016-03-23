@@ -345,6 +345,10 @@ cdef class MapArray:
         # Syntactic sugar: .copy() preserves dtype, .astype changes it.
         return self.copy(dtype)
 
+    def __repr__(self):
+        return ("<%dx%d sparse array of type '%s' with %d stored elements.>" %
+               (self.shape + (self.dtype.type, self.count_nonzero())))
+
     def todense(self):
         """Return the dense array representation of self.
 
