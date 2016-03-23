@@ -105,7 +105,7 @@ class BasicMixin(object):
         assert_equal(ma1.shape, (3, 5))
         assert_allclose(ma1.todense(),
                         np.array([[0, 0, 0, 0, 0],
-                                  [0, 1, 0, 0, 0], 
+                                  [0, 1, 0, 0, 0],
                                   [0, 0, 0, 0, 3]], dtype=self.dtype), atol=1e-15)
         assert_equal(ma.shape, (2, 2))
         assert_allclose(ma.todense(),
@@ -162,23 +162,6 @@ class BasicMixin(object):
         m1 = MapArray.from_coo(data, (row, col))
         assert_equal(m, m1)
 
-    def test_indexing(self):
-        ma = MapArray(dtype=self.dtype)
-        val = self.dtype(2)
-        ma[2, 2] = val
-        assert_equal(ma[2, 2], val)
-        assert_equal(ma[-1, 2], val)
-        assert_equal(ma[-2, 2], ma.fill_value)
-
-        with assert_raises(IndexError):
-            ma[-4, 2]
-
-        with assert_raises(TypeError):
-            ma['enikibeniki']
-
-        with assert_raises(TypeError):
-            ma[1]
-
 
 class TestBasicDouble(BasicMixin, TestCase):
     dtype = float
@@ -195,6 +178,8 @@ class TestBasicPyInt(BasicMixin, TestCase):
 class TestBasicPyBool(BasicMixin, TestCase):
     dtype = bool
 
+
+############################ Arithmetic binops
 
 class ArithmeticsMixin(object):
 
@@ -230,7 +215,7 @@ class ArithmeticsMixin(object):
             self.iop(ma1, None)
 
         with assert_raises(TypeError):
-            ress = self.iop(ma1, [1, 2, 3, 4])
+            self.iop(ma1, [1, 2, 3, 4])
 
     def test_inplace_iop_sparse(self):
         ma1 = self.ma.copy()
@@ -356,6 +341,8 @@ class ArithmeticsMixin(object):
                         self.op(ma.todense(), ma.todense()), atol=1e-15)
 
 
+############################ Addition
+
 class TestArithmDouble(ArithmeticsMixin, TestCase):
     dtype = float
 
@@ -371,6 +358,8 @@ class TestArithmPyInt(ArithmeticsMixin, TestCase):
 class TestArithmPyBool(ArithmeticsMixin, TestCase):
     dtype = bool
 
+
+############################ Multiplication
 
 class MulMixin(ArithmeticsMixin):
     iop = operator.imul       # x = iop(x, y) is x *= y
@@ -393,6 +382,7 @@ class TestMulPyBool(MulMixin, TestCase):
     dtype = bool
 
 
+############################ Subtraction
 
 class SubMixin(ArithmeticsMixin):
     iop = operator.isub       # x = iop(x, y) is x -= y
@@ -414,6 +404,8 @@ class TestSubPyInt(SubMixin, TestCase):
 #class TestSubPyBool(SubMixin, TestCase):
 #    dtype = bool
 
+
+############################ Type casting: (mostly) follow numpy
 
 class TestCasting(TestCase):
     m = MapArray(dtype=float)
@@ -458,6 +450,8 @@ class TestCasting(TestCase):
         assert_equal(m.dtype, np.dtype(float))
         assert_allclose(m.todense(), im.todense() + 1.2, atol=1e-15)
 
+
+############################ Comparisons
 
 class CmpMixin(object):
 
@@ -628,10 +622,12 @@ class CmpDoubleInt(CmpMixin, TestCase):
     rdtype = int
 
 
+############################ Matrix multiply
+
 HAVE_MATMUL = hasattr(operator, 'matmul')
 
-class MMulMixin(object):
 
+class MMulMixin(object):
     def setUp(self):
         rndm = np.random.RandomState(1234)
         arr = rndm.random_sample(size=(2, 3)) * 10
@@ -673,7 +669,6 @@ class MMulMixin(object):
         assert_allclose(x,
                         np.dot(a, b.todense()), atol=1e-15)
 
-
     @skipif(not HAVE_MATMUL)
     def test_incompat_dims(self):
         a, b = self.a, self.b
@@ -686,6 +681,7 @@ class TestMMulFloat(MMulMixin, TestCase):
     dtype_a = float
     dtype_b = float
 
+
 class TestMMulFloatInt(MMulMixin, TestCase):
     dtype_a = float
     dtype_b = int
@@ -694,6 +690,68 @@ class TestMMulFloatInt(MMulMixin, TestCase):
 class TestMMulIntInt(MMulMixin, TestCase):
     dtype_a = int
     dtype_b = int
+
+
+############################ Indexing
+
+def test_good_indexing():
+    ma = MapArray()
+    val = 2
+    ma[2, 2] = val
+    assert_equal(ma[2, 2], val)
+    assert_equal(ma[-1, 2], val)
+    assert_equal(ma[-2, 2], ma.fill_value)
+
+
+def test_bad_indexing():
+    # this is a nose test generator
+    ma = MapArray()
+    val = 2
+    ma[2, 2] = val
+
+    bad_indices = [
+                   # numpy raises an IndexError for all of these:
+                   (-4, 2),  # index is out of range
+                   (1, 2, 3),  # too many dimensions
+                   object(),   # integers. we needs them, my precious.
+                   (object(),),
+                   'enikibeniki',
+                   ('boobabeeboob',),
+                   (1j, 2),
+                   1.5,      # floats shall not pass
+                   (1.0, 2),
+
+                   # some of these could work. Someday.
+                   1,         # select a subarray
+                   (1,),
+                   (),        # what is it, a view
+                   (slice(None,), 1),    # assorted slices
+                   Ellipsis,
+                   (Ellipsis,),
+                   (1, Ellipsis),
+                   [1, 2],            # fancy indexing
+                   None,              # newaxis
+                   (None, None),
+                   (1, None),
+                   (1, 2, None),
+    ]
+    for idx in bad_indices:
+        yield check_bad_index_setitem, ma, idx
+
+    # (0, 4) is out-of-bounds for getitem (setitem expands, so it's OK)
+    bad_indices.append((0, 4))
+    for idx in bad_indices:
+        yield check_bad_index_getitem, ma, idx
+
+
+def check_bad_index_getitem(ma, idx):
+    with assert_raises(IndexError):
+        ma[idx]
+
+
+def check_bad_index_setitem(ma, idx):
+    with assert_raises(IndexError):
+        ma[idx] = 42
 
 
 if __name__ == "__main__":

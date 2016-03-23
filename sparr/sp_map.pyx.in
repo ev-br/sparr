@@ -10,6 +10,9 @@ from cpython.object cimport PyObject_IsTrue, PyObject_RichCompare
 # Indexing type declarations
 from sparr.common_types cimport single_index_type
 
+cdef extern from "util.h" namespace "sparray":
+    inline int _is_tuple_of_integers(object obj)
+
 cdef extern from "fixed_cap.h" namespace "sparray":
     cdef cppclass index_type:
         single_index_type& operator[](size_t j) except +
@@ -88,14 +91,6 @@ cdef extern from "elementwise_ops.h" namespace "sparray":
     npy_bool not_equal[S](S, S)
     npy_bool less[S](S, S)
     npy_bool greater[S](S, S)
-
-
-cdef index_type index_from_tuple(tuple tpl):
-    # conversion helper: 2D only.
-    cdef index_type idx
-    idx[0] = tpl[0]
-    idx[1] = tpl[1]
-    return idx
 
 
 {{py:
@@ -279,13 +274,17 @@ cdef class MapArray:
 
     cdef void _set_shape(self, object shape):
         # shape setter is private, only call it from __cinit__
+        cdef int j, nd = self.ndim
         if not shape:
-            shape = (0,)*self.ndim
+            shape = (0,)*nd
 
-        if len(shape) != self.ndim:
+        if not _is_tuple_of_integers(shape):
             raise TypeError("Shape %s not undestood." % str(shape))
 
-        cdef index_type shp = index_from_tuple(shape)
+        cdef index_type shp
+        for j in range(nd):
+            shp[j] = shape[j]
+
         {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
         {{IF}} self.typenum == {{NUM}}:
             self.p.{{C}}_ptr.set_shape(shp)
@@ -434,9 +433,15 @@ cdef class MapArray:
 
     def __getitem__(self, tpl):
         # 2D is hardcoded; no slicing
-        cdef index_type idx = index_from_tuple(tpl)
+        if not _is_tuple_of_integers(tpl):
+            raise IndexError("%s cannot be interpreted as an index into "
+                             " 2D array.")
+
+        # validate indices, normalize if needed.
+        cdef index_type idx
         cdef single_index_type ii
         {{for i in range(2)}}
+        idx[{{i}}] = tpl[{{i}}]
         ii = idx[{{i}}]
         if ii < 0:
             ii += self.shape[{{i}}]
@@ -455,9 +460,25 @@ cdef class MapArray:
         raise TypeError("__getitem__: dtype = %s not understood." % self.dtype)
 
     def __setitem__(self, tpl, value):
-        cdef int ival
-        cdef index_type idx = index_from_tuple(tpl)
+        if not _is_tuple_of_integers(tpl):
+            raise IndexError("%s cannot be interpreted as an index into "
+                             " 2D array.")
 
+        # validate indices, normalize if needed.
+        cdef index_type idx
+        cdef single_index_type ii
+        {{for i in range(2)}}
+        idx[{{i}}] = tpl[{{i}}]
+        ii = idx[{{i}}]
+        if ii < 0:
+            ii += self.shape[{{i}}]
+        if ii < 0:
+            raise IndexError("index %s is out of bounds for axis %s with "
+                             "size %s" % (tpl[{{i}}], {{i}}, self.shape[{{i}}]))
+        idx[{{i}}] = ii
+        {{endfor}}
+
+        cdef int ival
         {{for NUM, CT, IF in zip(TNUMS_GEN, CTYPES_GEN, CONDS_GEN)}}
         {{IF}} self.typenum == {{NUM}}:
             self.p.{{CT}}_ptr.set_one(idx, value)
