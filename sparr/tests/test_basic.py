@@ -282,8 +282,6 @@ class ArithmeticsMixin(object):
 
         with assert_raises(TypeError):
             self.iop(ma1, [1, 2, 3, 4])
-        with assert_raises(TypeError):
-            self.iop([1, 2, 3, 4], ma1)
 
     def test_sparse_dense_interop(self):
         # dense + sparse densifies for scipy.sparse matrices.

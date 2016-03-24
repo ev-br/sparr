@@ -508,12 +508,16 @@ cdef class MapArray:
         if isinstance(other, MapArray):
             return _i{{op}}_impl(self, other)
 
-        # else, other is a scalar.
-        dt = np.asarray(other).dtype     # XXX there must be a more direct way
-        arr_other = MapArray(shape=self.shape,
-                             dtype=dt,
-                             fill_value=other)
-        return _i{{op}}_impl(self, arr_other)
+        # else, other must be a scalar
+        try:
+            dt = np.asarray(other).dtype     # XXX there must be a more direct way
+            arr_other = MapArray(shape=self.shape,
+                                 dtype=dt,
+                                 fill_value=other)
+            return _i{{op}}_impl(self, arr_other)
+        except TypeError:
+            # failed to convert other to MapArray. Give up.
+            return NotImplemented
 
     def __{{op}}__(self, other):
         if isinstance(self, MapArray):
@@ -529,11 +533,15 @@ cdef class MapArray:
                 return self {{symb}} other.todense()
 
             # else, self must be a scalar
-            dt = np.asarray(self).dtype     # XXX there must be a more direct way
-            arr_self = MapArray(shape=other.shape,
-                                 dtype=dt,
-                                 fill_value=self)
-            return _i{{op}}_impl(arr_self, other)
+            try:
+                dt = np.asarray(self).dtype     # XXX there must be a more direct way
+                arr_self = MapArray(shape=other.shape,
+                                     dtype=dt,
+                                     fill_value=self)
+                return _i{{op}}_impl(arr_self, other)
+            except TypeError:
+                # conversion to MapArray failed. Give up.
+                return NotImplemented
     {{endfor}}
 
     ########### Booleans ########################
