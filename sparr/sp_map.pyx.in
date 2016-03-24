@@ -508,6 +508,18 @@ cdef class MapArray:
         if isinstance(other, MapArray):
             return _i{{op}}_impl(self, other)
 
+        # try checking if other quacks like a scipy.sparse matrix
+        if hasattr(other, 'tocoo'):
+            coo = other.tocoo()
+            try:
+                data, row, col = coo.data, coo.row, coo.col
+                row = row.astype(np.intp)  # XXX how MapArray.from_coo wants it
+                col = col.astype(np.intp)
+                coo_other = MapArray.from_coo(data, (row, col))
+                return _i{{op}}_impl(self, coo_other)
+            except AttributeError:
+                return NotImplemented
+
         # else, other must be a scalar
         try:
             dt = np.asarray(other).dtype     # XXX there must be a more direct way
