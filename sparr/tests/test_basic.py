@@ -365,8 +365,31 @@ class ArithmeticsMixin(object):
 
         ma1 = self.iop(ma1, csr)
         assert_(isinstance(ma1, MapArray))
-        assert_allclose(res.todense(),
+        assert_allclose(ma1.todense(),
                         self.op(self.ma.todense(), csr.toarray()), atol=1e-15)
+
+    @skipif(not HAVE_SCIPY)
+    def test_scipy_sparse_sparse_interop(self):
+        # csr_matrix + MapArray should work too
+        ma1 = self.ma.copy()
+        dense = self.rhs.todense()
+        csr = sparse.csr_matrix(dense)
+
+        res = self.op(csr, ma1)
+        assert_(isinstance(res, MapArray))
+        assert_allclose(res.todense(),
+                        self.op(csr.toarray(), ma1.todense()), atol=1e-15)
+
+        # also check the in-place version
+        ma1 = self.ma.copy()
+        dense = self.rhs.todense()
+        csr = sparse.csr_matrix(dense)
+        csr1 = csr.copy()
+
+        csr = self.iop(csr, ma1)
+        assert_(isinstance(csr, MapArray))
+        assert_allclose(csr.todense(),
+                        self.op(csr1.toarray(), self.ma.todense()), atol=1e-15)
 
 
 ############################ Addition

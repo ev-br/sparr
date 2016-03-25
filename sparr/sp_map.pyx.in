@@ -157,7 +157,6 @@ cdef class MapArray:
     --------
     >>> from sp_map import MapArray as M
     >>> m = M()
-    >>> m = M()
     >>> m.shape
     (0, 0)
 
@@ -515,12 +514,12 @@ cdef class MapArray:
             coo = other.tocoo()
             try:
                 data, row, col = coo.data, coo.row, coo.col
-                row = row.astype(np.intp)  # XXX how MapArray.from_coo wants it
-                col = col.astype(np.intp)
-                coo_other = MapArray.from_coo(data, (row, col))
-                return _i{{op}}_impl(self, coo_other)
             except AttributeError:
                 return NotImplemented
+            row = row.astype(np.intp)  # XXX how MapArray.from_coo wants it
+            col = col.astype(np.intp)
+            coo_other = MapArray.from_coo(data, (row, col))
+            return _i{{op}}_impl(self, coo_other)
 
         # else, other must be a scalar
         try:
@@ -545,6 +544,18 @@ cdef class MapArray:
             # other must be a MapArray
             if isinstance(self, np.ndarray):
                 return self {{symb}} other.todense()
+
+            # try checking if self quacks like a scipy.sparse matrix
+            if hasattr(self, 'tocoo'):
+                coo = self.tocoo()
+                try:
+                    data, row, col = coo.data, coo.row, coo.col
+                except AttributeError:
+                    return NotImplemented
+                row = row.astype(np.intp)  # XXX how MapArray.from_coo wants it
+                col = col.astype(np.intp)
+                coo_self = MapArray.from_coo(data, (row, col))
+                return _i{{op}}_impl(coo_self, other)
 
             # else, self must be a scalar
             try:
