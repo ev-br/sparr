@@ -175,6 +175,14 @@ class TestBasicPyInt(BasicMixin, TestCase):
     dtype = int
 
 
+class TestBasicNpInt32(BasicMixin, TestCase):
+    dtype = np.int32
+
+
+class TestBasicNpInt64(BasicMixin, TestCase):
+    dtype = np.int64
+
+
 class TestBasicPyBool(BasicMixin, TestCase):
     dtype = bool
 
@@ -375,6 +383,14 @@ class TestArithmPyInt(ArithmeticsMixin, TestCase):
     dtype = int
 
 
+class TestArithmNpInt32(ArithmeticsMixin, TestCase):
+    dtype = np.int32
+
+
+class TestArithmNpInt64(ArithmeticsMixin, TestCase):
+    dtype = np.int64
+
+
 class TestArithmPyBool(ArithmeticsMixin, TestCase):
     dtype = bool
 
@@ -398,6 +414,14 @@ class TestMulPyInt(MulMixin, TestCase):
     dtype = int
 
 
+class TestMulNpInt32(MulMixin, TestCase):
+    dtype = np.int32
+
+
+class TestMulNpInt64(MulMixin, TestCase):
+    dtype = np.int64
+
+
 class TestMulPyBool(MulMixin, TestCase):
     dtype = bool
 
@@ -419,6 +443,14 @@ class TestSubFloat(SubMixin, TestCase):
 
 class TestSubPyInt(SubMixin, TestCase):
     dtype = int
+
+
+class TestSubNpInt32(SubMixin, TestCase):
+    dtype = np.int32
+
+
+class TestSubNpInt64(SubMixin, TestCase):
+    dtype = np.int64
 
 
 #class TestSubPyBool(SubMixin, TestCase):

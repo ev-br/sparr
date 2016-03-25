@@ -4,7 +4,8 @@
 
 import numpy as np
 cimport numpy as cnp
-from numpy cimport PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE, npy_intp, npy_bool
+from numpy cimport (PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE,
+                    npy_intp, npy_bool, npy_int, npy_long, npy_longlong)
 from cpython.object cimport PyObject_IsTrue, PyObject_RichCompare
 
 # Indexing type declarations
@@ -94,8 +95,9 @@ cdef extern from "elementwise_ops.h" namespace "sparray":
 
 
 {{py:
-CTYPES_GEN = ['long', 'float', 'double']
-TNUMS_GEN = ['cnp.NPY_LONG', 'cnp.NPY_FLOAT', 'cnp.NPY_DOUBLE']
+CTYPES_GEN = ['npy_int', 'npy_long', 'npy_longlong', 'float', 'double']
+TNUMS_GEN = ['cnp.NPY_INT', 'cnp.NPY_LONG', 'cnp.NPY_LONGLONG',
+             'cnp.NPY_FLOAT', 'cnp.NPY_DOUBLE']
 CONDS_GEN = ['if'] + ['elif']*(len(TNUMS_GEN) - 1)
 
 # add types which need special casing (eg get/set)
