@@ -695,6 +695,20 @@ class CmpMixin(object):
         assert_equal(self.lhs.todense() > self.rhs,
                      self.lhs.todense() > self.rhs.todense())
 
+    @skipif(not HAVE_SCIPY)
+    def test_greater_coo_lhs(self):
+        data, (row, col) = self.rhs.to_coo()
+        coo = sparse.coo_matrix((data, (row, col)))
+        assert_equal((self.lhs > coo).todense(),
+                      self.lhs.todense() > coo.toarray())
+
+    @skipif(True, 'coo > map fails')
+    def test_greater_coo_lhs(self):
+        data, (row, col) = self.rhs.to_coo()
+        coo = sparse.coo_matrix((data, (row, col)))
+        assert_equal((coo > self.lhs).todense(),
+                      coo.toarray() > self.lhs.todense())
+
 
 class CmpDoubleDouble(CmpMixin, TestCase):
     ldtype = float
