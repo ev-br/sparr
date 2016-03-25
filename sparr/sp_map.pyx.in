@@ -4,7 +4,8 @@
 
 import numpy as np
 cimport numpy as cnp
-from numpy cimport PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE, npy_intp, npy_bool
+from numpy cimport (PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE,
+                    npy_intp, npy_bool, npy_int, npy_long, npy_longlong)
 from cpython.object cimport PyObject_IsTrue, PyObject_RichCompare
 
 # Indexing type declarations
@@ -94,8 +95,9 @@ cdef extern from "elementwise_ops.h" namespace "sparray":
 
 
 {{py:
-CTYPES_GEN = ['long', 'float', 'double']
-TNUMS_GEN = ['cnp.NPY_LONG', 'cnp.NPY_FLOAT', 'cnp.NPY_DOUBLE']
+CTYPES_GEN = ['npy_int', 'npy_long', 'npy_longlong', 'float', 'double']
+TNUMS_GEN = ['cnp.NPY_INT', 'cnp.NPY_LONG', 'cnp.NPY_LONGLONG',
+             'cnp.NPY_FLOAT', 'cnp.NPY_DOUBLE']
 CONDS_GEN = ['if'] + ['elif']*(len(TNUMS_GEN) - 1)
 
 # add types which need special casing (eg get/set)
@@ -154,7 +156,6 @@ cdef class MapArray:
     Examples
     --------
     >>> from sp_map import MapArray as M
-    >>> m = M()
     >>> m = M()
     >>> m.shape
     (0, 0)
@@ -508,12 +509,23 @@ cdef class MapArray:
         if isinstance(other, MapArray):
             return _i{{op}}_impl(self, other)
 
-        # else, other is a scalar.
-        dt = np.asarray(other).dtype     # XXX there must be a more direct way
-        arr_other = MapArray(shape=self.shape,
-                             dtype=dt,
-                             fill_value=other)
-        return _i{{op}}_impl(self, arr_other)
+        # try checking if other quacks like a scipy.sparse matrix
+        if hasattr(other, 'tocoo'):
+            coo_other = _try_converting_from_sparse(other)
+            if coo_other is NotImplemented:
+                return coo_other
+            return _i{{op}}_impl(self, coo_other)
+
+        # else, other must be a scalar
+        try:
+            dt = np.asarray(other).dtype     # XXX there must be a more direct way
+            arr_other = MapArray(shape=self.shape,
+                                 dtype=dt,
+                                 fill_value=other)
+            return _i{{op}}_impl(self, arr_other)
+        except TypeError:
+            # failed to convert other to MapArray. Give up.
+            return NotImplemented
 
     def __{{op}}__(self, other):
         if isinstance(self, MapArray):
@@ -528,12 +540,36 @@ cdef class MapArray:
             if isinstance(self, np.ndarray):
                 return self {{symb}} other.todense()
 
+            # try checking if self quacks like a scipy.sparse matrix
+            if hasattr(self, 'tocoo'):
+                # csr*map is ambiguous: is it matrix multiply or elementwise?
+                # refuse the temptation to guess and give up.
+                # FIXME: this actually fails to work. The reason is that
+                # sparse matrices check dimensions *before* handing over to
+                # MapArray. Maybe the right thing to do is to bail out
+                # from both csr * map and map * csr (even though the latter works).
+                {{if op == "mul"}}
+                raise ValueError("matrix times array is ambiguous. Please "
+                                 "decide if you want matrix or elementwise "
+                                 "multiplication.")
+                {{else}}
+                coo_self = _try_converting_from_sparse(self)
+                if coo_self is NotImplemented:
+                    return coo_self
+                return _i{{op}}_impl(coo_self, other)
+                {{endif}}
+
             # else, self must be a scalar
-            dt = np.asarray(self).dtype     # XXX there must be a more direct way
-            arr_self = MapArray(shape=other.shape,
-                                 dtype=dt,
-                                 fill_value=self)
-            return _i{{op}}_impl(arr_self, other)
+            try:
+                dt = np.asarray(self).dtype     # XXX there must be a more direct way
+                arr_self = MapArray(shape=other.shape,
+                                     dtype=dt,
+                                     fill_value=self)
+                return _i{{op}}_impl(arr_self, other)
+            except TypeError:
+                # conversion to MapArray failed. Give up.
+                return NotImplemented
+
     {{endfor}}
 
     ########### Booleans ########################
@@ -549,6 +585,12 @@ cdef class MapArray:
 
         if isinstance(other, MapArray):
             return _richcmp_impl(self, other, op)
+
+        if hasattr(other, "tocoo"):
+            coo_other = _try_converting_from_sparse(other)
+            if coo_other is NotImplemented:
+                return coo_other
+            return _richcmp_impl(self, coo_other, op)            
 
         # else, other is a scalar
         dt = np.asarray(other).dtype     # XXX there must be a more direct way
@@ -698,6 +740,19 @@ def _i{{op}}_impl(MapArray self not None, MapArray other not None):
     {{endfor}}
     raise NotImplementedError("_i{{op}}_: typecode %s not understood." % self.typenum)
 {{endfor}}
+
+
+def _try_converting_from_sparse(what):
+    """Convert a scipy.sparse matrix to MapArray. To be used in binops.
+    """
+    coo = what.tocoo()
+    try:
+        data, row, col = coo.data, coo.row, coo.col
+    except AttributeError:
+        return NotImplemented
+    row = row.astype(np.intp)  # XXX how MapArray.from_coo wants it
+    col = col.astype(np.intp)
+    return MapArray.from_coo(data, (row, col))
 
 
 cnp.import_array()

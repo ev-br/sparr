@@ -5,6 +5,10 @@ import numpy as np
 from numpy.testing import (run_module_suite, TestCase, assert_equal, assert_,
                            assert_allclose, assert_raises,)
 from numpy.testing.decorators import knownfailureif, skipif
+try:
+    from numpy.testing import SkipTest
+except ImportError:
+    from nose import SkipTest
 
 from .. import MapArray
 
@@ -175,6 +179,14 @@ class TestBasicPyInt(BasicMixin, TestCase):
     dtype = int
 
 
+class TestBasicNpInt32(BasicMixin, TestCase):
+    dtype = np.int32
+
+
+class TestBasicNpInt64(BasicMixin, TestCase):
+    dtype = np.int64
+
+
 class TestBasicPyBool(BasicMixin, TestCase):
     dtype = bool
 
@@ -282,8 +294,6 @@ class ArithmeticsMixin(object):
 
         with assert_raises(TypeError):
             self.iop(ma1, [1, 2, 3, 4])
-        with assert_raises(TypeError):
-            self.iop([1, 2, 3, 4], ma1)
 
     def test_sparse_dense_interop(self):
         # dense + sparse densifies for scipy.sparse matrices.
@@ -340,6 +350,56 @@ class ArithmeticsMixin(object):
         assert_allclose(ma2.todense(),
                         self.op(ma.todense(), ma.todense()), atol=1e-15)
 
+    @skipif(not HAVE_SCIPY)
+    def test_sparse_scipy_sparse_interop(self):
+        # MapArray + csr_matrix should work
+        ma1 = self.ma.copy()
+        dense = self.rhs.todense()
+        csr = sparse.csr_matrix(dense)
+
+        res = self.op(ma1, csr)
+        assert_(isinstance(res, MapArray))
+        assert_allclose(res.todense(),
+                        self.op(ma1.todense(), csr.toarray()), atol=1e-15)
+
+        # also check the in-place version
+        ma1 = self.ma.copy()
+        dense = self.rhs.todense()
+        csr = sparse.csr_matrix(dense)
+
+        ma1 = self.iop(ma1, csr)
+        assert_(isinstance(ma1, MapArray))
+        assert_allclose(ma1.todense(),
+                        self.op(self.ma.todense(), csr.toarray()), atol=1e-15)
+
+    # multiplication fails :-(
+    @skipif(not HAVE_SCIPY)
+    def test_scipy_sparse_sparse_interop(self):
+
+        if self.op == operator.mul:
+            raise SkipTest("csr * map fails.")
+
+        # csr_matrix + MapArray should work too
+        ma1 = self.ma.copy()
+        dense = self.rhs.todense()
+        csr = sparse.csr_matrix(dense)
+
+        res = self.op(csr, ma1)
+        assert_(isinstance(res, MapArray))
+        assert_allclose(res.todense(),
+                        self.op(csr.toarray(), ma1.todense()), atol=1e-15)
+
+        # also check the in-place version
+        ma1 = self.ma.copy()
+        dense = self.rhs.todense()
+        csr = sparse.csr_matrix(dense)
+        csr1 = csr.copy()
+
+        csr = self.iop(csr, ma1)
+        assert_(isinstance(csr, MapArray))
+        assert_allclose(csr.todense(),
+                        self.op(csr1.toarray(), self.ma.todense()), atol=1e-15)
+
 
 ############################ Addition
 
@@ -353,6 +413,14 @@ class TestArithmFloat(ArithmeticsMixin, TestCase):
 
 class TestArithmPyInt(ArithmeticsMixin, TestCase):
     dtype = int
+
+
+class TestArithmNpInt32(ArithmeticsMixin, TestCase):
+    dtype = np.int32
+
+
+class TestArithmNpInt64(ArithmeticsMixin, TestCase):
+    dtype = np.int64
 
 
 class TestArithmPyBool(ArithmeticsMixin, TestCase):
@@ -378,6 +446,14 @@ class TestMulPyInt(MulMixin, TestCase):
     dtype = int
 
 
+class TestMulNpInt32(MulMixin, TestCase):
+    dtype = np.int32
+
+
+class TestMulNpInt64(MulMixin, TestCase):
+    dtype = np.int64
+
+
 class TestMulPyBool(MulMixin, TestCase):
     dtype = bool
 
@@ -399,6 +475,14 @@ class TestSubFloat(SubMixin, TestCase):
 
 class TestSubPyInt(SubMixin, TestCase):
     dtype = int
+
+
+class TestSubNpInt32(SubMixin, TestCase):
+    dtype = np.int32
+
+
+class TestSubNpInt64(SubMixin, TestCase):
+    dtype = np.int64
 
 
 #class TestSubPyBool(SubMixin, TestCase):
@@ -610,6 +694,20 @@ class CmpMixin(object):
         # fails on numpy 1.6.2., works on 1.11.dev
         assert_equal(self.lhs.todense() > self.rhs,
                      self.lhs.todense() > self.rhs.todense())
+
+    @skipif(not HAVE_SCIPY)
+    def test_greater_coo_lhs(self):
+        data, (row, col) = self.rhs.to_coo()
+        coo = sparse.coo_matrix((data, (row, col)))
+        assert_equal((self.lhs > coo).todense(),
+                      self.lhs.todense() > coo.toarray())
+
+    @skipif(True, 'coo > map fails')
+    def test_greater_coo_lhs(self):
+        data, (row, col) = self.rhs.to_coo()
+        coo = sparse.coo_matrix((data, (row, col)))
+        assert_equal((coo > self.lhs).todense(),
+                      coo.toarray() > self.lhs.todense())
 
 
 class CmpDoubleDouble(CmpMixin, TestCase):
