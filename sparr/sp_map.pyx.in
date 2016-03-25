@@ -511,14 +511,9 @@ cdef class MapArray:
 
         # try checking if other quacks like a scipy.sparse matrix
         if hasattr(other, 'tocoo'):
-            coo = other.tocoo()
-            try:
-                data, row, col = coo.data, coo.row, coo.col
-            except AttributeError:
-                return NotImplemented
-            row = row.astype(np.intp)  # XXX how MapArray.from_coo wants it
-            col = col.astype(np.intp)
-            coo_other = MapArray.from_coo(data, (row, col))
+            coo_other = _try_converting_from_sparse(other)
+            if coo_other is NotImplemented:
+                return coo_other
             return _i{{op}}_impl(self, coo_other)
 
         # else, other must be a scalar
@@ -558,14 +553,9 @@ cdef class MapArray:
                                  "decide if you want matrix or elementwise "
                                  "multiplication.")
                 {{else}}
-                coo = self.tocoo()
-                try:
-                    data, row, col = coo.data, coo.row, coo.col
-                except AttributeError:
-                    return NotImplemented
-                row = row.astype(np.intp)  # XXX how MapArray.from_coo wants it
-                col = col.astype(np.intp)
-                coo_self = MapArray.from_coo(data, (row, col))
+                coo_self = _try_converting_from_sparse(self)
+                if coo_self is NotImplemented:
+                    return coo_self
                 return _i{{op}}_impl(coo_self, other)
                 {{endif}}
 
@@ -597,14 +587,9 @@ cdef class MapArray:
             return _richcmp_impl(self, other, op)
 
         if hasattr(other, "tocoo"):
-            coo = other.tocoo()
-            try:
-                data, row, col = coo.data, coo.row, coo.col
-            except AttributeError:
-                return NotImplemented
-            row = row.astype(np.intp)  # XXX how MapArray.from_coo wants it
-            col = col.astype(np.intp)
-            coo_other = MapArray.from_coo(data, (row, col))
+            coo_other = _try_converting_from_sparse(other)
+            if coo_other is NotImplemented:
+                return coo_other
             return _richcmp_impl(self, coo_other, op)            
 
         # else, other is a scalar
@@ -755,6 +740,19 @@ def _i{{op}}_impl(MapArray self not None, MapArray other not None):
     {{endfor}}
     raise NotImplementedError("_i{{op}}_: typecode %s not understood." % self.typenum)
 {{endfor}}
+
+
+def _try_converting_from_sparse(what):
+    """Convert a scipy.sparse matrix to MapArray. To be used in binops.
+    """
+    coo = what.tocoo()
+    try:
+        data, row, col = coo.data, coo.row, coo.col
+    except AttributeError:
+        return NotImplemented
+    row = row.astype(np.intp)  # XXX how MapArray.from_coo wants it
+    col = col.astype(np.intp)
+    return MapArray.from_coo(data, (row, col))
 
 
 cnp.import_array()
