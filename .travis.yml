@@ -10,10 +10,20 @@ matrix:
     - python: 3.5
       env:
         - UPGRADE="--upgrade"
+    - python: 2.7
+      env:
+        - HAVE_SCIPY=1
+    - python: 3.5
+      env:
+        - HAVE_SCIPY=1
 before_install:
     - travis_retry pip install --install-option="--no-cython-compile" Cython>=0.23.4
     - travis_retry pip install nose
     - travis_retry pip install $UPGRADE numpy
+    - |
+      if [ "${HAVE_SCIPY}" == "1" ]; then
+        travis_retry pip install scipy --timeout 60 --trusted-host travis-wheels.scikit-image.org -f http://travis-wheels.scikit-image.org/
+      fi
 script:
     - python -c'import numpy as np; print(np.__version__)'
     - python setup.py build_ext -i
