@@ -547,6 +547,17 @@ cdef class MapArray:
 
             # try checking if self quacks like a scipy.sparse matrix
             if hasattr(self, 'tocoo'):
+                # csr*map is ambiguous: is it matrix multiply or elementwise?
+                # refuse the temptation to guess and give up.
+                # FIXME: this actually fails to work. The reason is that
+                # sparse matrices check dimensions *before* handing over to
+                # MapArray. Maybe the right thing to do is to bail out
+                # from both csr * map and map * csr (even though the latter works).
+                {{if op == "mul"}}
+                raise ValueError("matrix times array is ambiguous. Please "
+                                 "decide if you want matrix or elementwise "
+                                 "multiplication.")
+                {{else}}
                 coo = self.tocoo()
                 try:
                     data, row, col = coo.data, coo.row, coo.col
@@ -556,6 +567,7 @@ cdef class MapArray:
                 col = col.astype(np.intp)
                 coo_self = MapArray.from_coo(data, (row, col))
                 return _i{{op}}_impl(coo_self, other)
+                {{endif}}
 
             # else, self must be a scalar
             try:
@@ -567,6 +579,7 @@ cdef class MapArray:
             except TypeError:
                 # conversion to MapArray failed. Give up.
                 return NotImplemented
+
     {{endfor}}
 
     ########### Booleans ########################
