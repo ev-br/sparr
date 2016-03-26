@@ -5,7 +5,7 @@
 import numpy as np
 cimport numpy as cnp
 from numpy cimport (PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE,
-                    npy_intp, npy_bool, 
+                    npy_intp, npy_bool, npy_byte, npy_ubyte,
                     npy_short, npy_int, npy_long, npy_longlong,
                     npy_ushort, npy_uint, npy_ulong, npy_ulonglong)
 from cpython.object cimport PyObject_IsTrue, PyObject_RichCompare
@@ -97,11 +97,11 @@ cdef extern from "elementwise_ops.h" namespace "sparray":
 
 
 {{py:
-CTYPES_GEN = ['npy_short', 'npy_int', 'npy_long', 'npy_longlong',
-              'npy_ushort', 'npy_uint', 'npy_ulong', 'npy_ulonglong',
+CTYPES_GEN = ['npy_byte', 'npy_short', 'npy_int', 'npy_long', 'npy_longlong',
+              'npy_ubyte', 'npy_ushort', 'npy_uint', 'npy_ulong', 'npy_ulonglong',
               'float', 'double']
-TNUMS_GEN = ['cnp.NPY_SHORT', 'cnp.NPY_INT', 'cnp.NPY_LONG', 'cnp.NPY_LONGLONG',
-             'cnp.NPY_USHORT', 'cnp.NPY_UINT', 'cnp.NPY_ULONG', 'cnp.NPY_ULONGLONG',
+TNUMS_GEN = ['cnp.NPY_BYTE', 'cnp.NPY_SHORT', 'cnp.NPY_INT', 'cnp.NPY_LONG', 'cnp.NPY_LONGLONG',
+             'cnp.NPY_UBYTE', 'cnp.NPY_USHORT', 'cnp.NPY_UINT', 'cnp.NPY_ULONG', 'cnp.NPY_ULONGLONG',
              'cnp.NPY_FLOAT', 'cnp.NPY_DOUBLE']
 CONDS_GEN = ['if'] + ['elif']*(len(TNUMS_GEN) - 1)
 

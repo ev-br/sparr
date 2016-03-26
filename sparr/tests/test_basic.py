@@ -179,6 +179,10 @@ class TestBasicPyInt(BasicMixin, TestCase):
     dtype = int
 
 
+class TestBasicNpInt8(BasicMixin, TestCase):
+    dtype = np.int8
+
+
 class TestBasicNpInt16(BasicMixin, TestCase):
     dtype = np.int16
 
@@ -189,6 +193,10 @@ class TestBasicNpInt32(BasicMixin, TestCase):
 
 class TestBasicNpInt64(BasicMixin, TestCase):
     dtype = np.int64
+
+
+class TestBasicNpUInt8(BasicMixin, TestCase):
+    dtype = np.uint8
 
 
 class TestBasicNpUInt16(BasicMixin, TestCase):
@@ -205,6 +213,14 @@ class TestBasicNpUInt64(BasicMixin, TestCase):
 
 class TestBasicPyBool(BasicMixin, TestCase):
     dtype = bool
+
+
+class TestBasicNpBool(BasicMixin, TestCase):
+    dtype = np.bool
+
+
+class TestBasicNpBool_(BasicMixin, TestCase):
+    dtype = np.bool_
 
 
 ############################ Arithmetic binops
@@ -435,6 +451,10 @@ class TestArithmPyInt(ArithmeticsMixin, TestCase):
     dtype = int
 
 
+class TestArithmNpInt8(ArithmeticsMixin, TestCase):
+    dtype = np.int8
+
+
 class TestArithmNpInt16(ArithmeticsMixin, TestCase):
     dtype = np.int16
 
@@ -445,6 +465,10 @@ class TestArithmNpInt32(ArithmeticsMixin, TestCase):
 
 class TestArithmNpInt64(ArithmeticsMixin, TestCase):
     dtype = np.int64
+
+
+class TestArithmNpUInt8(ArithmeticsMixin, TestCase):
+    dtype = np.uint8
 
 
 class TestArithmNpUInt16(ArithmeticsMixin, TestCase):
@@ -459,8 +483,12 @@ class TestArithmNpUInt64(ArithmeticsMixin, TestCase):
     dtype = np.uint64
 
 
-class TestArithmPyBool(ArithmeticsMixin, TestCase):
-    dtype = bool
+class TestArithmNpBool(ArithmeticsMixin, TestCase):
+    dtype = np.bool
+
+
+class TestArithmNpBool_(ArithmeticsMixin, TestCase):
+    dtype = np.bool_
 
 
 ############################ Multiplication
@@ -482,6 +510,10 @@ class TestMulPyInt(MulMixin, TestCase):
     dtype = int
 
 
+class TestMulNpInt8(MulMixin, TestCase):
+    dtype = np.int8
+
+
 class TestMulNpInt16(MulMixin, TestCase):
     dtype = np.int16
 
@@ -492,6 +524,10 @@ class TestMulNpInt32(MulMixin, TestCase):
 
 class TestMulNpInt64(MulMixin, TestCase):
     dtype = np.int64
+
+
+class TestMulNpUInt8(MulMixin, TestCase):
+    dtype = np.uint8
 
 
 class TestMulNpUInt16(MulMixin, TestCase):
@@ -508,6 +544,14 @@ class TestMulNpUInt64(MulMixin, TestCase):
 
 class TestMulPyBool(MulMixin, TestCase):
     dtype = bool
+
+
+class TestMulNpBool(MulMixin, TestCase):
+    dtype = np.bool
+
+
+class TestMulNpBool_(MulMixin, TestCase):
+    dtype = np.bool_
 
 
 ############################ Subtraction
