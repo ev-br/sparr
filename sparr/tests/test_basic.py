@@ -49,8 +49,8 @@ class BasicMixin(object):
 
     def test_fill_value_mutable(self):
         ma = MapArray(dtype=self.dtype)
-        ma.fill_value = -1.
-        assert_equal(ma.fill_value, self.dtype(-1))
+        ma.fill_value = 8
+        assert_equal(ma.fill_value, self.dtype(8))
 
         if self.dtype != np.dtype(bool):
             with assert_raises(TypeError):
@@ -61,13 +61,13 @@ class BasicMixin(object):
 
     def test_basic_insert(self):
         ma = MapArray(dtype=self.dtype)
-        ma[1, 1] = -1
+        ma[1, 1] = 2
         assert_equal(ma.shape, (2, 2))
         assert_equal(ma.ndim, 2)
         assert_equal(ma.count_nonzero(), 1)
         assert_allclose(ma.todense(),
                         np.array([[0, 0],
-                                  [0, -1]], dtype=self.dtype), atol=1e-15)
+                                  [0, 2]], dtype=self.dtype), atol=1e-15)
 
         ma[2, 3] = 8
         assert_equal(ma.ndim, 2)
@@ -75,18 +75,18 @@ class BasicMixin(object):
         assert_equal(ma.count_nonzero(), 2)
         assert_allclose(ma.todense(),
                         np.array([[0, 0, 0, 0],
-                                  [0, -1, 0, 0],
+                                  [0, 2, 0, 0],
                                   [0, 0, 0, 8]], dtype=self.dtype), atol=1e-15)
 
     def test_todense_fillvalue(self):
         ma = MapArray(dtype=self.dtype)
         ma[2, 3] = 8
-        ma[1, 1] = -1
+        ma[1, 1] = 2
         ma.fill_value = 1
         assert_equal(ma.count_nonzero(), 2)
         assert_allclose(ma.todense(),
                         np.array([[1, 1, 1, 1],
-                                  [1, -1, 1, 1],
+                                  [1, 2, 1, 1],
                                   [1, 1, 1, 8]], dtype=self.dtype), atol=1e-15)
 
     def test_int_overflow(self):
@@ -179,6 +179,14 @@ class TestBasicPyInt(BasicMixin, TestCase):
     dtype = int
 
 
+class TestBasicNpInt8(BasicMixin, TestCase):
+    dtype = np.int8
+
+
+class TestBasicNpInt16(BasicMixin, TestCase):
+    dtype = np.int16
+
+
 class TestBasicNpInt32(BasicMixin, TestCase):
     dtype = np.int32
 
@@ -187,8 +195,32 @@ class TestBasicNpInt64(BasicMixin, TestCase):
     dtype = np.int64
 
 
+class TestBasicNpUInt8(BasicMixin, TestCase):
+    dtype = np.uint8
+
+
+class TestBasicNpUInt16(BasicMixin, TestCase):
+    dtype = np.uint16
+
+
+class TestBasicNpUInt32(BasicMixin, TestCase):
+    dtype = np.uint32
+
+
+class TestBasicNpUInt64(BasicMixin, TestCase):
+    dtype = np.uint64
+
+
 class TestBasicPyBool(BasicMixin, TestCase):
     dtype = bool
+
+
+class TestBasicNpBool(BasicMixin, TestCase):
+    dtype = np.bool
+
+
+class TestBasicNpBool_(BasicMixin, TestCase):
+    dtype = np.bool_
 
 
 ############################ Arithmetic binops
@@ -208,15 +240,17 @@ class ArithmeticsMixin(object):
         arr1 = rndm.random_sample(size=(3, 5)) * 10
         arr1 = arr1.astype(self.dtype)
         self.rhs = MapArray.from_dense(arr1)
-        self.rhs.fill_value = -8
+        self.rhs.fill_value = 8
 
     def test_inplace_iop_scalar(self):
         ma1 = self.ma.copy()
-        ma1 = self.iop(ma1, 4)      # IOW, ma1 += 4
+
+        scalar = np.min(ma1.todense())
+        ma1 = self.iop(ma1, scalar)      # IOW, ma1 += scalar
 
         assert_equal(ma1.shape, self.ma.shape)
         assert_allclose(ma1.todense(),
-                        self.op(self.ma.todense(), 4.), atol=1e-15)
+                        self.op(self.ma.todense(), scalar), atol=1e-15)
 
     def test_inplace_iop_unsupported_type_obj(self):
         ma1 = self.ma.copy()
@@ -244,14 +278,14 @@ class ArithmeticsMixin(object):
         # incompatible shapes should raise ValueErrors
         ma1 = self.ma.copy()
         rhs = self.rhs.copy()
-        rhs[8, 9] = -101
+        rhs[8, 9] = 101
         with assert_raises(ValueError):
             self.iop(ma1, rhs)
 
     def test_sparse_op_sparse_wrong_shape(self):
         ma1 = self.ma.copy()
         rhs = self.rhs.copy()
-        rhs[8, 9] = -101
+        rhs[8, 9] = 101
         with assert_raises(ValueError):
             self.op(ma1, rhs)
 
@@ -266,19 +300,21 @@ class ArithmeticsMixin(object):
 
     def test_sparse_op_scalar(self):
         ma1 = self.ma.copy()
+        scalar = np.min(ma1.todense())
 
-        res = self.op(ma1, 4)
+        res = self.op(ma1, scalar)
         assert_(isinstance(res, MapArray))
         assert_allclose(res.todense(),
-                        self.op(ma1.todense(), 4), atol=1e-15)
+                        self.op(ma1.todense(), scalar), atol=1e-15)
 
     def test_scalar_op_sparse(self):
         ma1 = self.ma.copy()
+        scalar = np.min(ma1.todense())
 
-        res = self.op(4, ma1)
+        res = self.op(scalar, ma1)
         assert_(isinstance(res, MapArray))
         assert_allclose(res.todense(),
-                        self.op(4, ma1.todense()), atol=1e-15)
+                        self.op(scalar, ma1.todense()), atol=1e-15)
 
     def test_sparse_op_wrong_scalar(self):
         ma1 = self.ma.copy()
@@ -415,6 +451,14 @@ class TestArithmPyInt(ArithmeticsMixin, TestCase):
     dtype = int
 
 
+class TestArithmNpInt8(ArithmeticsMixin, TestCase):
+    dtype = np.int8
+
+
+class TestArithmNpInt16(ArithmeticsMixin, TestCase):
+    dtype = np.int16
+
+
 class TestArithmNpInt32(ArithmeticsMixin, TestCase):
     dtype = np.int32
 
@@ -423,8 +467,28 @@ class TestArithmNpInt64(ArithmeticsMixin, TestCase):
     dtype = np.int64
 
 
-class TestArithmPyBool(ArithmeticsMixin, TestCase):
-    dtype = bool
+class TestArithmNpUInt8(ArithmeticsMixin, TestCase):
+    dtype = np.uint8
+
+
+class TestArithmNpUInt16(ArithmeticsMixin, TestCase):
+    dtype = np.uint16
+
+
+class TestArithmNpUInt32(ArithmeticsMixin, TestCase):
+    dtype = np.uint32
+
+
+class TestArithmNpUInt64(ArithmeticsMixin, TestCase):
+    dtype = np.uint64
+
+
+class TestArithmNpBool(ArithmeticsMixin, TestCase):
+    dtype = np.bool
+
+
+class TestArithmNpBool_(ArithmeticsMixin, TestCase):
+    dtype = np.bool_
 
 
 ############################ Multiplication
@@ -446,6 +510,14 @@ class TestMulPyInt(MulMixin, TestCase):
     dtype = int
 
 
+class TestMulNpInt8(MulMixin, TestCase):
+    dtype = np.int8
+
+
+class TestMulNpInt16(MulMixin, TestCase):
+    dtype = np.int16
+
+
 class TestMulNpInt32(MulMixin, TestCase):
     dtype = np.int32
 
@@ -454,8 +526,32 @@ class TestMulNpInt64(MulMixin, TestCase):
     dtype = np.int64
 
 
+class TestMulNpUInt8(MulMixin, TestCase):
+    dtype = np.uint8
+
+
+class TestMulNpUInt16(MulMixin, TestCase):
+    dtype = np.uint16
+
+
+class TestMulNpUInt32(MulMixin, TestCase):
+    dtype = np.uint32
+
+
+class TestMulNpUInt64(MulMixin, TestCase):
+    dtype = np.uint64
+
+
 class TestMulPyBool(MulMixin, TestCase):
     dtype = bool
+
+
+class TestMulNpBool(MulMixin, TestCase):
+    dtype = np.bool
+
+
+class TestMulNpBool_(MulMixin, TestCase):
+    dtype = np.bool_
 
 
 ############################ Subtraction
@@ -484,6 +580,13 @@ class TestSubNpInt32(SubMixin, TestCase):
 class TestSubNpInt64(SubMixin, TestCase):
     dtype = np.int64
 
+
+class TestSubNpUInt32(SubMixin, TestCase):
+    dtype = np.uint32
+
+
+class TestSubNpUInt64(SubMixin, TestCase):
+    dtype = np.uint64
 
 #class TestSubPyBool(SubMixin, TestCase):
 #    dtype = bool
