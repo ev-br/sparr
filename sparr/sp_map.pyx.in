@@ -7,14 +7,22 @@ cimport numpy as cnp
 from numpy cimport (PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE,
                     npy_intp, npy_bool, npy_byte, npy_ubyte,
                     npy_short, npy_int, npy_long, npy_longlong,
-                    npy_ushort, npy_uint, npy_ulong, npy_ulonglong)
+                    npy_ushort, npy_uint, npy_ulong, npy_ulonglong,
+                    npy_cdouble)
 from cpython.object cimport PyObject_IsTrue, PyObject_RichCompare
+from cpython.complex cimport (PyComplex_Check, PyComplex_FromDoubles,
+                              PyComplex_RealAsDouble, PyComplex_ImagAsDouble)
 
 # Indexing type declarations
 from sparr.common_types cimport single_index_type
 
 cdef extern from "util.h" namespace "sparray":
     inline int _is_tuple_of_integers(object obj)
+
+cdef extern from "complex_ops.h":
+    cdef cppclass npy_cdouble_wrapper:
+        double real
+        double imag
 
 cdef extern from "fixed_cap.h" namespace "sparray":
     cdef cppclass index_type:
@@ -106,9 +114,9 @@ TNUMS_GEN = ['cnp.NPY_BYTE', 'cnp.NPY_SHORT', 'cnp.NPY_INT', 'cnp.NPY_LONG', 'cn
 CONDS_GEN = ['if'] + ['elif']*(len(TNUMS_GEN) - 1)
 
 # add types which need special casing (eg get/set)
-CTYPES = CTYPES_GEN + ['npy_bool']
-TNUMS = TNUMS_GEN + ['cnp.NPY_BOOL']
-CONDS = CONDS_GEN + ['elif']
+CTYPES = CTYPES_GEN + ['npy_bool', 'npy_cdouble_wrapper']
+TNUMS = TNUMS_GEN + ['cnp.NPY_BOOL', 'cnp.NPY_CDOUBLE']
+CONDS = CONDS_GEN + ['elif', 'elif']
 }}
 
 
@@ -244,17 +252,22 @@ cdef class MapArray:
 
     property fill_value:
         def __get__(self):
+            cdef npy_cdouble_wrapper z
             {{for NUM, C, IF in zip(TNUMS_GEN, CTYPES_GEN, CONDS_GEN)}}
             {{IF}} self.typenum == {{NUM}}:
                 return self.p.{{C}}_ptr.fill_value()
             {{endfor}}
             elif self.typenum == cnp.NPY_BOOL:
                 return self.p.npy_bool_ptr.fill_value() != 0
+            elif self.typenum == cnp.NPY_CDOUBLE:
+                z = self.p.npy_cdouble_wrapper_ptr.fill_value()
+                return PyComplex_FromDoubles(z.real, z.imag)
             else:
                 raise TypeError("fill_value: dtype = %s unhandled." % self.dtype)
 
         def __set__(self, value):
             cdef int ival
+            cdef npy_cdouble_wrapper z
             {{for NUM, C, IF in zip(TNUMS_GEN, CTYPES_GEN, CONDS_GEN)}}
             {{IF}} self.typenum == {{NUM}}:
                 self.p.{{C}}_ptr.set_fill_value(value)
@@ -264,6 +277,13 @@ cdef class MapArray:
                 if ival == -1:
                     raise ValueError("Cannot interpet %s as a boolean" % value)
                 self.p.npy_bool_ptr.set_fill_value(ival)
+            elif self.typenum == cnp.NPY_CDOUBLE:
+                ival = PyComplex_Check(value)
+                if ival == -1:
+                    raise ValueError("Cannot interpret %s as a complex number" % value)
+                z.real = PyComplex_RealAsDouble(value)
+                z.imag = PyComplex_ImagAsDouble(value)
+                self.p.npy_cdouble_wrapper_ptr.set_fill_value(z)
             else:
                 raise TypeError("fill_value: dtype = %s unhandled." % self.dtype)
 
@@ -467,6 +487,10 @@ cdef class MapArray:
         {{endfor}}
         if self.typenum == cnp.NPY_BOOL:
             return self.p.npy_bool_ptr.get_one(idx) != 0
+        cdef npy_cdouble_wrapper z
+        if self.typenum == cnp.NPY_CDOUBLE:
+            z = self.p.npy_cdouble_wrapper_ptr.get_one(idx)
+            return PyComplex_FromDoubles(z.real, z.imag)
         raise TypeError("__getitem__: dtype = %s not understood." % self.dtype)
 
     def __setitem__(self, tpl, value):
@@ -489,6 +513,7 @@ cdef class MapArray:
         {{endfor}}
 
         cdef int ival
+        cdef npy_cdouble_wrapper z
         {{for NUM, CT, IF in zip(TNUMS_GEN, CTYPES_GEN, CONDS_GEN)}}
         {{IF}} self.typenum == {{NUM}}:
             self.p.{{CT}}_ptr.set_one(idx, value)
@@ -498,6 +523,13 @@ cdef class MapArray:
             if ival == -1:
                 raise ValueError("Cannot interpet %s as a boolean" % value)
             self.p.npy_bool_ptr.set_one(idx, ival)
+        elif self.typenum == cnp.NPY_CDOUBLE:
+            ival = PyComplex_Check(value)
+            if ival == -1:
+                raise ValueError("Cannot interpret %s as a complex number" % value)
+            z.real = PyComplex_RealAsDouble(value)
+            z.imag = PyComplex_ImagAsDouble(value)
+            self.p.npy_cdouble_wrapper_ptr.set_one(idx, z)
         else:
             raise TypeError("__setitem__: dtype = %s not understood." % self.dtype)
 
