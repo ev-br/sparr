@@ -223,6 +223,9 @@ class TestBasicNpBool_(BasicMixin, TestCase):
     dtype = np.bool_
 
 
+class TestBasicComplex(BasicMixin, TestCase):
+    dtype = complex
+
 ############################ Arithmetic binops
 
 class ArithmeticsMixin(object):
@@ -491,6 +494,9 @@ class TestArithmNpBool_(ArithmeticsMixin, TestCase):
     dtype = np.bool_
 
 
+class TestArithmComplex(ArithmeticsMixin, TestCase):
+    dtype = complex
+
 ############################ Multiplication
 
 class MulMixin(ArithmeticsMixin):
@@ -554,6 +560,10 @@ class TestMulNpBool_(MulMixin, TestCase):
     dtype = np.bool_
 
 
+class TestMulComplex(MulMixin, TestCase):
+    dtype = complex
+
+
 ############################ Subtraction
 
 class SubMixin(ArithmeticsMixin):
@@ -587,6 +597,10 @@ class TestSubNpUInt32(SubMixin, TestCase):
 
 class TestSubNpUInt64(SubMixin, TestCase):
     dtype = np.uint64
+
+
+class TestSubComplex(SubMixin, TestCase):
+    dtype = complex
 
 #class TestSubPyBool(SubMixin, TestCase):
 #    dtype = bool
