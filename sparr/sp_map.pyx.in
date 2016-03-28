@@ -197,10 +197,20 @@ cdef class MapArray:
 
     __array_priority__ = 10.1     # equal to that of sparse matrices
 
-    def __init__(self, shape=None, fill_value=0, dtype=float):
+    def __init__(self, shape=None, fill_value=None, dtype=None):
         pass
 
-    def __cinit__(self, shape=None, fill_value=0, dtype=float, *args, **kwds):
+    def __cinit__(self, shape=None, fill_value=None, dtype=None, *args, **kwds):
+
+        if dtype is None:
+            if fill_value is None:
+                dtype = np.dtype(float)
+                fill_value = 0.0
+            else:
+                dtype = np.asarray(fill_value).dtype
+        else:
+            if fill_value is None:
+                fill_value = 0
 
         # this seems to convert float etc to numpy dtypes
         dtype = np.dtype(dtype)

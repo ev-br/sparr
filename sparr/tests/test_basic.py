@@ -969,5 +969,22 @@ def check_bad_index_setitem(ma, idx):
         ma[idx] = 42
 
 
+def test_fill_value_dtype():
+    # test that the dtype defaults to the fill_value dtype
+
+    # default is float
+    m = MapArray()
+    assert_equal(m.dtype, np.dtype(float)) 
+
+    # if fill_value is provided, its dtype is used
+    f = np.uint8(1)
+    m = MapArray(fill_value=f)
+    assert_equal(m.dtype, np.dtype(np.uint8))
+
+    # ... unless it's given explicitly
+    m = MapArray(fill_value=4.2, dtype=bool)
+    assert_equal(m.dtype, np.dtype(bool))
+
+
 if __name__ == "__main__":
     run_module_suite()
