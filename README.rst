@@ -23,11 +23,34 @@ Inserting new elements expands the array
 array([[   0.,    0.,    0.,   42.],
        [   0.,    0., -101.,    0.]])
 
+The arrays have a `dtype` attribute and can be type-cast via `astype`:
+
+>>> m.dtype
+dtype('float64')
+>>> i = m.astype(int)
+>>> i.dtype
+dtype('int64')
+
+The rules for implicit type casting in arithmetic operations generally follow
+numpy.
+
 Arithmetic operations are elementwise
 
 >>> m2 = m * m + 1
 >>> m2.to_coo()
 (array([  1765.,  10202.]), (array([0, 1]), array([3, 2])))
+
+(Here the ``to_coo`` method returns the arrays ``data, (row, col)`` consistent
+with `scipy.sparse.coo_matrix`. The reverse conversion is available via
+the ``fom_coo`` method.)
+
+Matrix multiplication operator is available on Python 3.5 and above:
+
+>>> a = np.array([[0, -1], [2, 0]])
+>>> m = M.from_dense(a)
+>>> (m @ m).todense()
+array([[-2, 0],
+       [0, 2]])
 
 
 Installation
