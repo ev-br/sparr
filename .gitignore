@@ -6,3 +6,5 @@ a.out
 #### cython output files
 *cpp
 sparr/sp_map.pyx
+#### ipython
+.ipynb_checkpoints/*
