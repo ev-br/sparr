@@ -262,7 +262,7 @@ operations<T, I, num_dim>::to_coo(const map_array_t<T, I, num_dim>* src,
     typename map_array_t<T, I, num_dim>::const_iterator it = src->begin();
     I j = 0;
     for(; it != src->end(); ++it){
-        assert(j < num_dim);
+        assert(j < num_elem);
         idx = it->first;
         _data[j] = it->second;
         _row[j] = idx[0];
