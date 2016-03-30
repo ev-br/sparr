@@ -14,9 +14,11 @@ matrix:
       env:
         - UPGRADE="--upgrade"
         - HAVE_SCIPY=1
+        - SPARR_DEBUG=1
     - python: 3.5
       env:
         - HAVE_SCIPY=1
+        - SPARR_DEBUG=1
 before_install:
     - travis_retry pip install --install-option="--no-cython-compile" Cython>=0.23.4
     - travis_retry pip install nose
