@@ -6,6 +6,14 @@ import os
 import sys
 import numpy
 
+
+# are we compiling in the debugging mode? 
+try:
+    if os.environ['SPARR_DEBUG']:
+        extra_compile_args = ['-UNDEBUG']
+except KeyError:
+    extra_compile_args = []
+
 def process_tempita_pyx():
     # taken from scipy's cythonize.py
     fromfile = os.path.join("sparr", "sp_map.pyx.in")
@@ -22,6 +30,7 @@ process_tempita_pyx()
 
 ext = Extension("sparr._sp_map", [os.path.join("sparr", "sp_map.pyx")],
                 include_dirs = [numpy.get_include()],
+                extra_compile_args = extra_compile_args,
                 language="c++",)
                 
 setup(name="sparr",
