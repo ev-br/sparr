@@ -16,9 +16,6 @@ from cpython.complex cimport (PyComplex_Check, PyComplex_FromDoubles,
 # Indexing type declarations
 from sparr.common_types cimport single_index_type
 
-cdef extern from "util.h" namespace "sparray":
-    inline int _is_tuple_of_integers(object obj)
-
 cdef extern from "complex_ops.h":
     cdef cppclass npy_cdouble_wrapper:
         double real
@@ -27,10 +24,13 @@ cdef extern from "complex_ops.h":
 cdef extern from "fixed_cap.h" namespace "sparray":
     cdef cppclass index_type:
         single_index_type& operator[](size_t j) except +
+        int ndim() const
 
 cdef extern from "fixed_cap.h":
     single_index_type[] FC_ELEMS(index_type) nogil
 
+cdef extern from "util.h" namespace "sparray":
+    inline int _is_tuple_of_integers(object obj, index_type& idx)
 
 cdef extern from "sp_map.h" namespace "sparray":
     cdef cppclass map_array_t[T]:
@@ -300,10 +300,12 @@ cdef class MapArray:
     property shape:
         def __get__(self):
             cdef index_type sh
+            cdef int nd
             {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
             {{IF}} self.typenum == {{NUM}}:
                 sh = self.p.{{C}}_ptr.shape()
-                return sh[0], sh[1]           # TODO: ndim != 2
+                nd = sh.ndim()
+                return tuple(sh[i] for i in range(nd))
             {{endfor}}
             else:
                 raise TypeError("shape: dtype = %s unhandled." % self.dtype)
@@ -314,12 +316,9 @@ cdef class MapArray:
         if not shape:
             shape = (0,)*nd
 
-        if not _is_tuple_of_integers(shape):
-            raise TypeError("Shape %s not undestood." % str(shape))
-
         cdef index_type shp
-        for j in range(nd):
-            shp[j] = shape[j]
+        if not _is_tuple_of_integers(shape, shp):
+            raise TypeError("Shape %s not undestood." % str(shape))
 
         {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
         {{IF}} self.typenum == {{NUM}}:
@@ -472,24 +471,21 @@ cdef class MapArray:
     ##### Single element access #####
 
     def __getitem__(self, tpl):
-        # 2D is hardcoded; no slicing
-        if not _is_tuple_of_integers(tpl):
+        # no slicing, single-element access only
+        cdef index_type idx
+        if not _is_tuple_of_integers(tpl, idx):
             raise IndexError("%s cannot be interpreted as an index into "
-                             " 2D array.")
+                             " an array." % str(tpl))
 
         # validate indices, normalize if needed.
-        cdef index_type idx
-        cdef single_index_type ii
-        {{for i in range(2)}}
-        idx[{{i}}] = tpl[{{i}}]
-        ii = idx[{{i}}]
-        if ii < 0:
-            ii += self.shape[{{i}}]
-        if ii < 0 or ii >= self.shape[{{i}}]:
-            raise IndexError("index %s is out of bounds for axis %s with "
-                             "size %s" % (tpl[{{i}}], {{i}}, self.shape[{{i}}]))
-        idx[{{i}}] = ii
-        {{endfor}}
+        cdef int j, nd = self.ndim
+        cdef shp = self.shape
+        for j in range(nd):
+            if idx[j] < 0:
+                idx[j] += shp[j]
+            if idx[j] < 0 or idx[j] >= shp[j]:
+                raise IndexError("index %s is out of bounds for axis %s with "
+                                 "size %s" % (idx[j], j, shp[j]))
 
         {{for NUM, CT in zip(TNUMS_GEN, CTYPES_GEN)}}
         if self.typenum == {{NUM}}:
@@ -504,23 +500,20 @@ cdef class MapArray:
         raise TypeError("__getitem__: dtype = %s not understood." % self.dtype)
 
     def __setitem__(self, tpl, value):
-        if not _is_tuple_of_integers(tpl):
+        cdef index_type idx
+        if not _is_tuple_of_integers(tpl, idx):
             raise IndexError("%s cannot be interpreted as an index into "
-                             " 2D array.")
+                             " an array.")
 
         # validate indices, normalize if needed.
-        cdef index_type idx
-        cdef single_index_type ii
-        {{for i in range(2)}}
-        idx[{{i}}] = tpl[{{i}}]
-        ii = idx[{{i}}]
-        if ii < 0:
-            ii += self.shape[{{i}}]
-        if ii < 0:
-            raise IndexError("index %s is out of bounds for axis %s with "
-                             "size %s" % (tpl[{{i}}], {{i}}, self.shape[{{i}}]))
-        idx[{{i}}] = ii
-        {{endfor}}
+        cdef int j, nd = self.ndim
+        cdef shp = self.shape
+        for j in range(nd):
+            if idx[j] < 0:
+                idx[j] += shp[j]
+            if idx[j] < 0: # or idx[j] >= shp[j]:
+                raise IndexError("index %s is out of bounds for axis %s with "
+                                 "size %s" % (idx[j], j, shp[j]))
 
         cdef int ival
         cdef npy_cdouble_wrapper z

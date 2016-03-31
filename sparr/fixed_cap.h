@@ -24,6 +24,8 @@ struct fixed_capacity
 
     fixed_capacity(const I* c_arr = NULL);  // NB: no range checking
 
+    int ndim() const { return (int)num_dim; }
+
 };
 
 typedef fixed_capacity<single_index_type, 2> index_type;
