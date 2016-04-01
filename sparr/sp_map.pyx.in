@@ -198,6 +198,7 @@ cdef class MapArray:
     """
     cdef union_t p
     cdef int typenum
+    cdef int _is_shape_fixed
 
     __array_priority__ = 10.1     # equal to that of sparse matrices
 
@@ -231,6 +232,7 @@ cdef class MapArray:
         # handle shape
         try:
             self._set_shape(shape)
+            self._is_shape_fixed = 0 if shape is None else 1
         except TypeError:
             raise TypeError("Shape must be a tuple, got %s." % shape)
 
@@ -314,7 +316,14 @@ cdef class MapArray:
             else:
                 raise TypeError("shape: dtype = %s unhandled." % self.dtype)
 
-    cdef void _set_shape(self, object shape):
+    property is_shape_fixed:
+        def __get__(self):
+            return bool(self._is_shape_fixed)
+
+        def __set__(self, value):
+            self._is_shape_fixed = 1 if value else 0
+
+    def _set_shape(self, object shape):
         # shape setter is private, only call it from __cinit__
         cdef int j, nd = self.ndim
         if not shape:
@@ -508,19 +517,21 @@ cdef class MapArray:
 
         {{for NUM, CT, IF in zip(TNUMS_GEN, CTYPES_GEN, CONDS_GEN)}}
         {{IF}} self.typenum == {{NUM}}:
-            validate_index[{{CT}}](idx, self.p.{{CT}}_ptr, False)
+            validate_index[{{CT}}](idx, self.p.{{CT}}_ptr, self._is_shape_fixed)
             self.p.{{CT}}_ptr.set_one(idx, value)
 
         {{endfor}}
         elif self.typenum == cnp.NPY_BOOL:
-            validate_index[npy_bool](idx, self.p.npy_bool_ptr, False)
+            validate_index[npy_bool](idx, self.p.npy_bool_ptr, self._is_shape_fixed)
             ival = PyObject_IsTrue(value)
             if ival == -1:
                 raise ValueError("Cannot interpet %s as a boolean" % value)
             self.p.npy_bool_ptr.set_one(idx, ival)
 
         elif self.typenum == cnp.NPY_CDOUBLE:
-            validate_index[npy_cdouble_wrapper](idx, self.p.npy_cdouble_wrapper_ptr, False)
+            validate_index[npy_cdouble_wrapper](idx,
+                                                self.p.npy_cdouble_wrapper_ptr,
+                                                self._is_shape_fixed)
             ival = PyComplex_Check(value)
             if ival == -1:
                 raise ValueError("Cannot interpret %s as a complex number" % value)
