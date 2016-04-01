@@ -8,22 +8,22 @@
 namespace sparray {
 
 
-template<typename T, typename I=single_index_type, size_t num_dim=2>
+template<typename T, typename I=single_index_type>
 struct map_array_t
 {
-    typedef std::map<fixed_capacity<I,num_dim>,
+    typedef std::map<fixed_capacity<I>,
                       T,
-                      fixed_capacity_cmp<I, num_dim> > map_type;
+                      fixed_capacity_cmp<I> > map_type;
     typedef typename map_type::value_type value_type;    // pair<key, value>
     typedef typename map_type::key_type index_type;
     typedef typename map_type::const_iterator const_iterator;
     typedef typename map_type::iterator iterator;
 
-    map_array_t(const T& fill_value = 0);
+    map_array_t(const size_t num_dim = 2, const T& fill_value = 0);
     map_array_t(const map_array_t& other);
-    template<typename S> void copy_from(const map_array_t<S, I, num_dim> *src);
+    template<typename S> void copy_from(const map_array_t<S, I> *src);
 
-    size_t ndim() const { return num_dim; }
+    size_t ndim() const { return m_ndim; }
     index_type shape() const { return shape_; }
     void set_shape(const index_type& idx);
 
@@ -55,6 +55,7 @@ struct map_array_t
         map_type data_;
         index_type shape_;
         T fill_value_;
+        int m_ndim;
 };
 
 
@@ -66,75 +67,79 @@ struct map_array_t
  *     It should probably go away once the I and num_dim template arguments
  *     are sorted out.
  */
-template<typename T, typename I=single_index_type, size_t num_dim=2>
+template<typename T, typename I=single_index_type>
 struct operations
 {
     // convert to a dense representation (C order). Caller's responsible for
     // allocating memory.
-    void todense(const map_array_t<T, I, num_dim>* src,
+    void todense(const map_array_t<T, I>* src,
                  void* dest,
                  const I num_elem);
 
     // convert to a COO triplet of (data, row, column) arrays.
     // Caller's responsible for allocating memory.
-    void to_coo(const map_array_t<T, I, num_dim>* src,
+    void to_coo(const map_array_t<T, I>* src,
                 void* data, void* row, void* clmn,
                 const I num_elem);
 
     // x <- alpha f(x) + beta x
-    void inplace_unary(map_array_t<T, I, num_dim> *self,
+    void inplace_unary(map_array_t<T, I> *self,
                        T (*op)(T x),
                        const T alpha=1, const T beta=0);
 
     // x <- alpha f(x, y) + beta x, \foreach x in self, \foreach y in other
     void inplace_binop(T (*binop)(T x, T y),
-                       map_array_t<T, I, num_dim> *self, 
-                       const map_array_t<T, I, num_dim>* other,
+                       map_array_t<T, I> *self, 
+                       const map_array_t<T, I>* other,
                        const T alpha=1, const T beta=0);
 
     // z <- alpha f(x, y) + beta x, \foreach x in arg1, \foreach y in arg2
     template<typename S> void apply_binop(T (*binop)(S x, S y),
-                                          map_array_t<T, I, num_dim> *self,
-                                          const map_array_t<S, I, num_dim> *arg1,
-                                          const map_array_t<S, I, num_dim> *arg2);
+                                          map_array_t<T, I> *self,
+                                          const map_array_t<S, I> *arg1,
+                                          const map_array_t<S, I> *arg2);
 
     // Matrix multiplication: C <- A @ B
-    void apply_mmul(map_array_t<T, I, num_dim> *C,
-                    const map_array_t<T, I, num_dim>* A,
-                    const map_array_t<T, I, num_dim>* B);
+    void apply_mmul(map_array_t<T, I> *C,
+                    const map_array_t<T, I>* A,
+                    const map_array_t<T, I>* B);
 
 };
 
 
 /////////////////// IMPLEMENTATIONS of map_array_t methods.
 
-template<typename T, typename I, size_t num_dim>
-inline map_array_t<T, I, num_dim>::map_array_t(const T& fill_value)
+template<typename T, typename I>
+inline map_array_t<T, I>::map_array_t(size_t num_dim, const T& fill_value)
 {
     for(size_t j=0; j < num_dim; ++j){
         shape_[j] = 0;
     }
     fill_value_ = fill_value;
+    m_ndim = num_dim;
 }
 
 
-template<typename T, typename I, size_t num_dim>
-inline map_array_t<T, I, num_dim>::map_array_t(const map_array_t<T, I, num_dim>& other)
+template<typename T, typename I>
+inline map_array_t<T, I>::map_array_t(const map_array_t<T, I>& other)
 {
     copy_from(&other);
 }
 
 
-template<typename T, typename I, size_t num_dim>
+template<typename T, typename I>
 template<typename S>
 inline void
-map_array_t<T, I, num_dim>::copy_from(const map_array_t<S, I, num_dim> *src)
+map_array_t<T, I>::copy_from(const map_array_t<S, I> *src)
 {
     if(!src)
         throw std::invalid_argument("copy from NULL");
 
-    typename map_array_t<S, I, num_dim>::const_iterator it = src->begin();
-    typename map_array_t<T, I, num_dim>::iterator hint = this->begin();
+    if(this->ndim() != src->ndim())
+        throw std::runtime_error("Dimensions mismatch.");
+
+    typename map_array_t<S, I>::const_iterator it = src->begin();
+    typename map_array_t<T, I>::iterator hint = this->begin();
 
     for(; it != src->end(); ++it){
         T value = static_cast<T>(it->second);
@@ -142,7 +147,7 @@ map_array_t<T, I, num_dim>::copy_from(const map_array_t<S, I, num_dim> *src)
         hint->second = value;
     }
 
-    for(size_t j=0; j < num_dim; ++j){
+    for(size_t j=0; j < ndim(); ++j){
         shape_[j] = src->shape()[j];
     }
 
@@ -150,25 +155,25 @@ map_array_t<T, I, num_dim>::copy_from(const map_array_t<S, I, num_dim> *src)
 }
 
 
-template<typename T, typename I, size_t num_dim>
+template<typename T, typename I>
 inline T
-map_array_t<T, I, num_dim>::get_one(const map_array_t::index_type& idx) const
+map_array_t<T, I>::get_one(const map_array_t::index_type& idx) const
 {
     const_iterator it = this->find(idx);
     return (it != this->end()) ? it->second : fill_value_;
 }
 
 
-template<typename T, typename I, size_t num_dim>
+template<typename T, typename I>
 inline void
-map_array_t<T, I, num_dim>::set_one(const map_array_t::index_type& idx, const T& value)
+map_array_t<T, I>::set_one(const map_array_t::index_type& idx, const T& value)
 {
     // XXX Can use a hint if inserting consequtive values.
     std::pair<iterator, bool> p = this->insert(std::make_pair(idx, value));
     p.first->second = value;
 
     // update the shape if needed
-    for(size_t j=0; j < num_dim; ++j){
+    for(size_t j=0; j < ndim(); ++j){
         if(idx[j] >= shape_[j]){
             shape_[j] = idx[j] + 1;
         }
@@ -176,13 +181,13 @@ map_array_t<T, I, num_dim>::set_one(const map_array_t::index_type& idx, const T&
 }
 
 
-template<typename T, typename I, size_t num_dim>
+template<typename T, typename I>
 inline void 
-map_array_t<T, I, num_dim>::set_shape(const index_type& shp)
+map_array_t<T, I>::set_shape(const index_type& shp)
 {
     index_type min_shape = get_min_shape(*this);
 
-    for(size_t j = 0; j < num_dim; ++j){
+    for(size_t j = 0; j < ndim(); ++j){
         if(shp[j] >= min_shape[j]){
             shape_[j] = shp[j];
         }
@@ -195,11 +200,11 @@ map_array_t<T, I, num_dim>::set_shape(const index_type& shp)
 
 /* Flat index to an array. C order, 2D only.
  */
-template<typename T, typename I, size_t num_dim>
+template<typename T, typename I>
 inline I
-map_array_t<T, I, num_dim>::_flat_index(const typename map_array_t<T, I, num_dim>::index_type& index) const
+map_array_t<T, I>::_flat_index(const typename map_array_t<T, I>::index_type& index) const
 {
-    assert(num_dim == 2);
+    assert(ndim() == 2);
     I stride = shape_[1];
     return index[0]*stride + index[1];
 }
@@ -208,9 +213,9 @@ map_array_t<T, I, num_dim>::_flat_index(const typename map_array_t<T, I, num_dim
 
 ///////////////////////////////////////// IMPL operations
 
-template<typename T, typename I, size_t num_dim>
+template<typename T, typename I>
 inline void
-operations<T, I, num_dim>::todense(const map_array_t<T, I, num_dim>* src,
+operations<T, I>::todense(const map_array_t<T, I>* src,
                                    void* dest,
                                    const I num_elem)
 {
@@ -223,7 +228,7 @@ operations<T, I, num_dim>::todense(const map_array_t<T, I, num_dim>* src,
     std::fill(_dest, _dest + num_elem, src->fill_value());
 
     // fill nonzero elements
-    typename map_array_t<T, I, num_dim>::const_iterator it = src->begin();
+    typename map_array_t<T, I>::const_iterator it = src->begin();
     for(; it != src->end(); ++it){
         I idx = src->_flat_index(it->first);
         assert(idx < num_elem);
@@ -232,13 +237,13 @@ operations<T, I, num_dim>::todense(const map_array_t<T, I, num_dim>* src,
 }
 
 
-template<typename T, typename I, size_t num_dim>
+template<typename T, typename I>
 inline void
-operations<T, I, num_dim>::to_coo(const map_array_t<T, I, num_dim>* src,
-                                  void* data, void* row, void* clmn,
-                                  const I num_elem)
+operations<T, I>::to_coo(const map_array_t<T, I>* src,
+                         void* data, void* row, void* clmn,
+                         const I num_elem)
 {
-    assert(num_dim == 2);
+    assert(src->ndim() == 2);
 
     if (!src){ throw std::invalid_argument("to_coo: src is NULL."); }
 
@@ -258,8 +263,8 @@ operations<T, I, num_dim>::to_coo(const map_array_t<T, I, num_dim>* src,
         throw std::runtime_error("num_elem < 0");
     if (num_elem == 0){ return; }
 
-    typename map_array_t<T, I, num_dim>::index_type idx;
-    typename map_array_t<T, I, num_dim>::const_iterator it = src->begin();
+    typename map_array_t<T, I>::index_type idx;
+    typename map_array_t<T, I>::const_iterator it = src->begin();
     I j = 0;
     for(; it != src->end(); ++it){
         assert(j < num_elem);
@@ -272,16 +277,16 @@ operations<T, I, num_dim>::to_coo(const map_array_t<T, I, num_dim>* src,
 }
 
 
-template<typename T, typename I, size_t num_dim>
+template<typename T, typename I>
 inline void
-operations<T, I, num_dim>::inplace_unary(map_array_t<T, I, num_dim> *self,
+operations<T, I>::inplace_unary(map_array_t<T, I> *self,
                                          T (*op)(T x),
                                          T alpha, T beta)
 {
     if(!self)
         throw std::invalid_argument("unary_op: self is NULL");
 
-    typename map_array_t<T, I, num_dim>::iterator it = self->begin();
+    typename map_array_t<T, I>::iterator it = self->begin();
     for (; it != self->end(); ++it){
         it->second = alpha * (*op)(it->second) + beta * it->second;
     }
@@ -290,11 +295,11 @@ operations<T, I, num_dim>::inplace_unary(map_array_t<T, I, num_dim> *self,
 }
 
 
-template<typename T, typename I, size_t num_dim>
+template<typename T, typename I>
 inline void
-operations<T, I, num_dim>::inplace_binop(T (*binop)(T x, T y),
-                                         map_array_t<T, I, num_dim> *self,
-                                         const map_array_t<T, I, num_dim> *other,
+operations<T, I>::inplace_binop(T (*binop)(T x, T y),
+                                         map_array_t<T, I> *self,
+                                         const map_array_t<T, I> *other,
                                          T alpha, T beta)
 {
     if(!self)
@@ -303,7 +308,7 @@ operations<T, I, num_dim>::inplace_binop(T (*binop)(T x, T y),
         throw std::invalid_argument("binop: other is NULL");
 
     // check that the dimensions are compatible
-    for(size_t j=0; j<num_dim; ++j){
+    for(size_t j=0; j<self->ndim(); ++j){
         if(self->shape()[j] != other->shape()[j]){
             // TODO: probably want to output the dimensions here
             throw std::invalid_argument("Binop: incompatible dimensions.");
@@ -311,9 +316,9 @@ operations<T, I, num_dim>::inplace_binop(T (*binop)(T x, T y),
     }
 
     // run over the nonzero elements of *this. This is O(n1 * log(n2))
-    typename map_array_t<T, I, num_dim>::iterator it = self->begin();
-    typename map_array_t<T, I, num_dim>::const_iterator it_other;
-    typename map_array_t<T, I, num_dim>::index_type idx;
+    typename map_array_t<T, I>::iterator it = self->begin();
+    typename map_array_t<T, I>::const_iterator it_other;
+    typename map_array_t<T, I>::index_type idx;
     for(; it != self->end(); ++it){
         idx = it->first;
         it_other = other->find(idx);
@@ -326,8 +331,8 @@ operations<T, I, num_dim>::inplace_binop(T (*binop)(T x, T y),
         // run over the nonzero elements of *other; those which are present in both
         // *this and *other have been taken care of already. Insert new ones
         // into *this. This loop's complexity is O(n2 * log(n1))
-        typename map_array_t<T, I, num_dim>::index_type idx;
-        typename map_array_t<T, I, num_dim>::const_iterator it_other = other->begin();
+        typename map_array_t<T, I>::index_type idx;
+        typename map_array_t<T, I>::const_iterator it_other = other->begin();
         for(; it_other != other->end(); ++it_other){
             idx = it_other->first;
             T value = alpha * (*binop)(self->fill_value(), it_other->second) +
@@ -343,13 +348,13 @@ operations<T, I, num_dim>::inplace_binop(T (*binop)(T x, T y),
 }
 
 
-template<typename T, typename I, size_t num_dim>
+template<typename T, typename I>
 template<typename S>
 inline void
-operations<T, I, num_dim>::apply_binop(T (*binop)(S x, S y),
-                                       map_array_t<T, I, num_dim> *self,
-                                       const map_array_t<S, I, num_dim> *arg1,
-                                       const map_array_t<S, I, num_dim> *arg2)
+operations<T, I>::apply_binop(T (*binop)(S x, S y),
+                                       map_array_t<T, I> *self,
+                                       const map_array_t<S, I> *arg1,
+                                       const map_array_t<S, I> *arg2)
 {
     // XXX maybe generalize to $alpha f(x, y) + beta y$
     if(!self)
@@ -360,7 +365,7 @@ operations<T, I, num_dim>::apply_binop(T (*binop)(S x, S y),
         throw std::invalid_argument("apply_binop: arg2 is NULL");
 
     // check that the dimensions are compatible
-    for(size_t j=0; j<num_dim; ++j){
+    for(size_t j=0; j<self->ndim(); ++j){
         if(arg1->shape()[j] != arg2->shape()[j]){
             throw std::invalid_argument("Binop: incompatible dimensions.");
         }
@@ -370,9 +375,9 @@ operations<T, I, num_dim>::apply_binop(T (*binop)(S x, S y),
     self->set_shape(arg1->shape());
 
     // run over the nonzero elements of *arg1. This is O(n1 * log(n2) * log(n1))
-    std::pair<typename map_array_t<T, I, num_dim>::iterator, bool> p;
-    typename map_array_t<T, I, num_dim>::index_type idx;
-    typename map_array_t<S, I, num_dim>::const_iterator it, it2;
+    std::pair<typename map_array_t<T, I>::iterator, bool> p;
+    typename map_array_t<T, I>::index_type idx;
+    typename map_array_t<S, I>::const_iterator it, it2;
     for(it = arg1->begin(); it != arg1->end(); ++it){
         idx = it->first;
         it2 = arg2->find(idx);
@@ -389,9 +394,9 @@ operations<T, I, num_dim>::apply_binop(T (*binop)(S x, S y),
         // run over the nonzero elements of *arg2; those which are present in both
         // *arg1 and *arg2 have been taken care of already.
         // This loop's complexity is O(n2 * log(n1) * log(n2))
-        std::pair<typename map_array_t<T, I, num_dim>::iterator, bool> p;
-        typename map_array_t<T, I, num_dim>::index_type idx;
-        typename map_array_t<S, I, num_dim>::const_iterator it1, it2;
+        std::pair<typename map_array_t<T, I>::iterator, bool> p;
+        typename map_array_t<T, I>::index_type idx;
+        typename map_array_t<S, I>::const_iterator it1, it2;
         for(it2 = arg2->begin(); it2 != arg2->end(); ++it2){
                 idx = it2->first;
                 it1 = arg1->find(idx);
@@ -412,11 +417,11 @@ operations<T, I, num_dim>::apply_binop(T (*binop)(S x, S y),
 }
 
 
-template<typename T, typename I, size_t num_dim>
+template<typename T, typename I>
 inline void
-operations<T, I, num_dim>::apply_mmul(map_array_t<T, I, num_dim> *C,
-                                      const map_array_t<T, I, num_dim> *A,
-                                      const map_array_t<T, I, num_dim> *B)
+operations<T, I>::apply_mmul(map_array_t<T, I> *C,
+                                      const map_array_t<T, I> *A,
+                                      const map_array_t<T, I> *B)
 {
     if(!C)
         throw std::invalid_argument("mmul: C is NULL");
@@ -425,13 +430,15 @@ operations<T, I, num_dim>::apply_mmul(map_array_t<T, I, num_dim> *C,
     if(!B)
         throw std::invalid_argument("mmul: B is NULL");
 
-    assert(num_dim == 2);
+    assert(C->ndim() == 2);
+    assert(A->ndim() == 2);
+    assert(B->ndim() == 2);
 
     if(A->shape()[1] != B->shape()[0])
         throw std::invalid_argument("MMul: incompatible dimensions.");
 
     // the shape of the result is known, set it right away
-    I arr[num_dim];
+    I arr[2];
     arr[0] = A->shape()[0];
     arr[1] = B->shape()[1];
     C->set_shape(arr);
@@ -442,10 +449,10 @@ operations<T, I, num_dim>::apply_mmul(map_array_t<T, I, num_dim> *C,
         throw std::runtime_error("Non-zero fill_values not handled yet.");
 
     // C_{ik} = alpha A_{ij} B_{jk} + beta C_{ik}
-    std::pair<typename map_array_t<T, I, num_dim>::iterator, bool> p;
-    typename map_array_t<T, I, num_dim>::iterator itC;
-    typename map_array_t<T, I, num_dim>::const_iterator itA, itB;
-    typename map_array_t<T, I, num_dim>::index_type idxA, idxB;
+    std::pair<typename map_array_t<T, I>::iterator, bool> p;
+    typename map_array_t<T, I>::iterator itC;
+    typename map_array_t<T, I>::const_iterator itA, itB;
+    typename map_array_t<T, I>::index_type idxA, idxB;
 
     T Aij, Bjk, Cik, value;
     for (itA = A->begin(); itA != A->end(); ++itA){
@@ -459,7 +466,7 @@ operations<T, I, num_dim>::apply_mmul(map_array_t<T, I, num_dim> *C,
 
             Bjk = itB->second;
             arr[1] = idxB[1];
-            typename map_array_t<T, I, num_dim>::index_type idx(arr);
+            typename map_array_t<T, I>::index_type idx(arr);
             itC = C->find(idx);
             Cik = (itC != C->end()) ? itC->second
                                     : C->fill_value();
@@ -477,16 +484,16 @@ operations<T, I, num_dim>::apply_mmul(map_array_t<T, I, num_dim> *C,
  * shape() might be too large if some elements were deleted.
  * Recompute the minimum size shape. Complexity is O(N).
  */
-template<typename T, typename I, size_t num_dim>
-inline typename map_array_t<T, I, num_dim>::index_type
-get_min_shape(const map_array_t<T, I, num_dim>& arg)
+template<typename T, typename I>
+inline typename map_array_t<T, I>::index_type
+get_min_shape(const map_array_t<T, I>& arg)
 {
-    typename map_array_t<T, I, num_dim>::index_type sh;
-    for (size_t j = 0; j < num_dim; ++j){ sh[j] = 0; }
+    typename map_array_t<T, I>::index_type sh;
+    for (size_t j = 0; j < arg.ndim(); ++j){ sh[j] = 0; }
 
-    typename map_array_t<T, I, num_dim>::const_iterator it = arg.begin();
+    typename map_array_t<T, I>::const_iterator it = arg.begin();
     for (; it != arg.end(); ++it){
-        for (size_t j=0; j < num_dim; ++j){ 
+        for (size_t j=0; j < arg.ndim(); ++j){ 
             if (it->first[j] >= sh[j]){
                 sh[j] = it->first[j] + 1;
             }
@@ -503,12 +510,12 @@ get_min_shape(const map_array_t<T, I, num_dim>& arg)
 
 } // namespace sparray
 
-template<typename T, typename I, size_t num_dim>
+template<typename T, typename I>
 std::ostream&
-operator<<(std::ostream& out, const sparray::map_array_t<T, I, num_dim>& ma)
+operator<<(std::ostream& out, const sparray::map_array_t<T, I>& ma)
 {
     out << "\n*** shape = " << ma.shape() << "  num_elem = "<< ma.count_nonzero() <<" {\n";
-    typename sparray::map_array_t<T, I, num_dim>::const_iterator it = ma.begin();
+    typename sparray::map_array_t<T, I>::const_iterator it = ma.begin();
     for (; it != ma.end(); ++it){
         std::cout << "    " << it->first << " -> " << it->second <<"\n";
     }
