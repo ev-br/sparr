@@ -438,10 +438,13 @@ operations<T, I>::apply_mmul(map_array_t<T, I> *C,
         throw std::invalid_argument("MMul: incompatible dimensions.");
 
     // the shape of the result is known, set it right away
-    I arr[2];
-    arr[0] = A->shape()[0];
-    arr[1] = B->shape()[1];
-    C->set_shape(arr);
+    index_type shp;
+    shp[0] = A->shape()[0];
+    shp[1] = B->shape()[1];
+//    I arr[2];
+//    arr[0] = A->shape()[0];
+//    arr[1] = B->shape()[1];
+    C->set_shape(shp);
 
     // XXX non-zero fill_values are not implemented. The result is likely
     // dense anyway, so having to convert to dense explicitly is not *that* bad.
@@ -458,15 +461,15 @@ operations<T, I>::apply_mmul(map_array_t<T, I> *C,
     for (itA = A->begin(); itA != A->end(); ++itA){
         Aij = itA->second;
         idxA = itA->first;
-        arr[0] = idxA[0];
+        shp[0] = idxA[0];
         for(itB = B->begin(); itB != B->end(); ++itB){
             idxB = itB->first;
             if( idxA[1] != idxB[0])
                 continue;                       // XXX row/column_iterators?
 
             Bjk = itB->second;
-            arr[1] = idxB[1];
-            typename map_array_t<T, I>::index_type idx(arr);
+            shp[1] = idxB[1];
+            typename map_array_t<T, I>::index_type idx(shp);
             itC = C->find(idx);
             Cik = (itC != C->end()) ? itC->second
                                     : C->fill_value();
