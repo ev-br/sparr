@@ -202,10 +202,10 @@ cdef class MapArray:
 
     __array_priority__ = 10.1     # equal to that of sparse matrices
 
-    def __init__(self, shape=None, fill_value=None, dtype=None):
+    def __init__(self, shape=None, ndim=None, fill_value=None, dtype=None):
         pass
 
-    def __cinit__(self, shape=None, fill_value=None, dtype=None, *args, **kwds):
+    def __cinit__(self, shape=None, ndim=None, fill_value=None, dtype=None, *args, **kwds):
 
         if dtype is None:
             if fill_value is None:
@@ -221,6 +221,29 @@ cdef class MapArray:
         dtype = np.dtype(dtype)
         self.typenum = dtype.num
 
+        # shape/ndim: if none are given, default is ndim=2, shape=None
+        cdef index_type shp
+        if shape is None:
+            self._is_shape_fixed = False
+            if ndim is None:
+                ndim = 2
+            else:
+                if ndim != int(ndim):
+                    raise ValueError("ndim: Expected integer, got %s." % ndim)
+            shape = (0,)*ndim
+            _is_tuple_of_integers(shape, shp)   # XXX: this converts shape to shp
+        else:
+            if not _is_tuple_of_integers(shape, shp):
+                raise TypeError("Shape %s not undestood." % str(shape))
+
+            self._is_shape_fixed = True
+            if ndim is None:
+                ndim = len(shape)
+            else:
+                if len(shape) != ndim:
+                    raise ValueError("shape = %s and ndim= %s are ambiguous" %
+                                     (shape, ndim))
+
         # allocate memory on the correct type pointer
         {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
         {{IF}} self.typenum == {{NUM}}:
@@ -229,12 +252,13 @@ cdef class MapArray:
         else:
             raise TypeError("dtype %s  not supported." % dtype)
 
-        # handle shape
-        try:
-            self._set_shape(shape)
-            self._is_shape_fixed = 0 if shape is None else 1
-        except TypeError:
-            raise TypeError("Shape must be a tuple, got %s." % shape)
+        # Finally, propagate the shape to lower level
+        {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} self.typenum == {{NUM}}:
+            self.p.{{C}}_ptr.set_shape(shp)
+        {{endfor}}
+        else:
+            raise TypeError("shape setter: dtype = %s unhandled." % self.dtype)
 
         #handle fill_value
         self.fill_value = fill_value
@@ -322,23 +346,6 @@ cdef class MapArray:
 
         def __set__(self, value):
             self._is_shape_fixed = 1 if value else 0
-
-    def _set_shape(self, object shape):
-        # shape setter is private, only call it from __cinit__
-        cdef int j, nd = self.ndim
-        if not shape:
-            shape = (0,)*nd
-
-        cdef index_type shp
-        if not _is_tuple_of_integers(shape, shp):
-            raise TypeError("Shape %s not undestood." % str(shape))
-
-        {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
-        {{IF}} self.typenum == {{NUM}}:
-            self.p.{{C}}_ptr.set_shape(shp)
-        {{endfor}}
-        else:
-            raise TypeError("shape setter: dtype = %s unhandled." % self.dtype)
 
     def count_nonzero(self):
         {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
