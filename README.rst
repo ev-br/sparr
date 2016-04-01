@@ -23,6 +23,18 @@ Inserting new elements expands the array
 array([[   0.,    0.,    0.,   42.],
        [   0.,    0., -101.,    0.]])
 
+To have an array of fixed shape, set the `is_shape_fixed` attribute to ``True``,
+or provide the shape explicitly in the constructor:
+
+>>> m = M(shape=(2, 3))
+>>> m.is_shape_fixed
+True
+>>> m[4, 5] = 6
+Traceback (most recent call last)
+...
+IndexError: index 4 is out of bounds for axis 0 with size 2
+
+
 The arrays have a `dtype` attribute and can be type-cast via `astype`:
 
 >>> m.dtype

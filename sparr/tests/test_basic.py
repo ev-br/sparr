@@ -78,6 +78,21 @@ class BasicMixin(object):
                                   [0, 2, 0, 0],
                                   [0, 0, 0, 8]], dtype=self.dtype), atol=1e-15)
 
+    def test_shape_fixed(self):
+        # if shape is set in ctor explicitly, it's fixed
+        m = MapArray(dtype=self.dtype, shape=(3, 4))
+
+        assert_equal(m.is_shape_fixed, True)
+        with assert_raises(IndexError):
+            m[4, 5] = 4
+        assert_equal(m.shape, (3, 4))
+
+        # can manually toggle the shape being mutable or not
+        m.is_shape_fixed = False
+        m[4, 5] = 4
+        assert_equal(m[4, 5], self.dtype(4))
+        assert_equal(m.shape, (5, 6))
+
     def test_todense_fillvalue(self):
         ma = MapArray(dtype=self.dtype)
         ma[2, 3] = 8
