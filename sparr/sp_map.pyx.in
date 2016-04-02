@@ -387,7 +387,7 @@ cdef class MapArray:
         """
         if dtype is None:
             dtype = self.dtype
-        newobj = MapArray(dtype=dtype)
+        newobj = MapArray(dtype=dtype, shape=self.shape)
 
         cdef int typenum_src = self.typenum
         cdef int typenum_dest = newobj.typenum
@@ -445,7 +445,7 @@ cdef class MapArray:
     def from_dense(cls, arr):
         """Construct from a dense array.
         """
-        self = MapArray(dtype=arr.dtype)
+        self = MapArray(dtype=arr.dtype, ndim=arr.ndim)
         for idx, val in np.ndenumerate(arr):
             self[idx] = val
         return self
@@ -466,6 +466,9 @@ cdef class MapArray:
         This function ignores the `fill_value`.
 
         """
+        if self.ndim() != 2:
+            raise NotImplementedError("to_coo is only implemented for 2D arrays.")
+
         cdef npy_intp[1] sh
         cdef cnp.ndarray row, clmn, data
 
@@ -500,7 +503,7 @@ cdef class MapArray:
 
         """
         row, col = row_col
-        self = MapArray(dtype=data.dtype)
+        self = MapArray(dtype=data.dtype, ndim=2)
         for val, r, c in zip(data, row, col):
             self[r, c] = val
         return self
@@ -535,7 +538,7 @@ cdef class MapArray:
         cdef index_type idx = self.index_factory.get_new()
         if not _is_tuple_of_integers(tpl, idx):
             raise IndexError("%s cannot be interpreted as an index into "
-                             " an array.")
+                             " an array." % str(tpl))
         cdef int ival
         cdef npy_cdouble_wrapper z
 
@@ -677,6 +680,9 @@ cdef class MapArray:
         if not isinstance(self, MapArray) or not isinstance(A, MapArray):
             raise NotImplementedError("matmul only handles sparse arrays.")
 
+        if self.ndim() != 2 or A.ndim() != 2:
+            raise NotImplementedError("matmul is only implemented for 2D arrays.")
+
         if self.fill_value != 0 or A.fill_value != 0:
             raise NotImplementedError("The result is likely dense.")
 
@@ -737,7 +743,7 @@ def _richcmp_impl(MapArray self not None, MapArray other not None, int op):
             other = other.astype(res_type)
 
     # by now, both self and other are of the same dtype
-    result = MapArray(dtype=bool)
+    result = MapArray(dtype=bool, ndim=self.ndim)
 
     # dispatch on the types
     {{for NUM, CT in zip(TNUMS, CTYPES)}}

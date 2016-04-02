@@ -201,9 +201,19 @@ template<typename T, typename I>
 inline I
 map_array_t<T, I>::_flat_index(const typename map_array_t<T, I>::index_type& index) const
 {
-    assert(ndim() == 2);
-    I stride = shape_[1];
-    return index[0]*stride + index[1];
+    if (ndim() == 1){
+        return index[0];
+    }
+    else if (ndim() == 2){
+        I stride = shape_[1];
+        return index[0]*stride + index[1];
+    }
+    else if (ndim() == 3){
+        return index[0]*shape_[1]*shape_[2] + index[1]*shape_[2] + index[2]; 
+    }
+    else{
+        throw std::runtime_error("oops");
+    }
 }
 
 
