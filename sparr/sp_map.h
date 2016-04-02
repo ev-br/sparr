@@ -19,7 +19,14 @@ struct map_array_t
     typedef typename map_type::const_iterator const_iterator;
     typedef typename map_type::iterator iterator;
 
-    map_array_t(const size_t num_dim = 2, const T& fill_value = 0);
+    map_array_t(const size_t num_dim = 2,
+                const T& fill_value = 0) : shape_(num_dim),
+                                           fill_value_(fill_value),
+                                           m_ndim(num_dim){
+        for(size_t j=0; j < num_dim; ++j){
+            shape_[j] = 0;
+        }
+    };
     map_array_t(const map_array_t& other);
     template<typename S> void copy_from(const map_array_t<S, I> *src);
 
@@ -108,16 +115,6 @@ struct operations
 
 
 /////////////////// IMPLEMENTATIONS of map_array_t methods.
-
-template<typename T, typename I>
-inline map_array_t<T, I>::map_array_t(size_t num_dim, const T& fill_value)
-{
-    for(size_t j=0; j < num_dim; ++j){
-        shape_[j] = 0;
-    }
-    fill_value_ = fill_value;
-    m_ndim = num_dim;
-}
 
 
 template<typename T, typename I>
@@ -491,7 +488,7 @@ template<typename T, typename I>
 inline typename map_array_t<T, I>::index_type
 get_min_shape(const map_array_t<T, I>& arg)
 {
-    typename map_array_t<T, I>::index_type sh;
+    typename map_array_t<T, I>::index_type sh(arg.ndim());
     for (size_t j = 0; j < arg.ndim(); ++j){ sh[j] = 0; }
 
     typename map_array_t<T, I>::const_iterator it = arg.begin();
