@@ -445,7 +445,7 @@ operations<T, I>::apply_mmul(map_array_t<T, I> *C,
         throw std::invalid_argument("MMul: incompatible dimensions.");
 
     // the shape of the result is known, set it right away
-    index_type shp;
+    index_type shp(C->ndim());
     shp[0] = A->shape()[0];
     shp[1] = B->shape()[1];
 //    I arr[2];
