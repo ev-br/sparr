@@ -351,7 +351,6 @@ cdef class MapArray:
             {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
             {{IF}} self.typenum == {{NUM}}:
                 sh = self.p.{{C}}_ptr.shape()
-                nd = sh.ndim()
                 return tuple(sh[i] for i in range(nd))
             {{endfor}}
             else:
@@ -388,6 +387,7 @@ cdef class MapArray:
         if dtype is None:
             dtype = self.dtype
         newobj = MapArray(dtype=dtype, shape=self.shape)
+        newobj.is_shape_fixed = False
 
         cdef int typenum_src = self.typenum
         cdef int typenum_dest = newobj.typenum
@@ -466,7 +466,7 @@ cdef class MapArray:
         This function ignores the `fill_value`.
 
         """
-        if self.ndim() != 2:
+        if self.ndim != 2:
             raise NotImplementedError("to_coo is only implemented for 2D arrays.")
 
         cdef npy_intp[1] sh
@@ -680,7 +680,7 @@ cdef class MapArray:
         if not isinstance(self, MapArray) or not isinstance(A, MapArray):
             raise NotImplementedError("matmul only handles sparse arrays.")
 
-        if self.ndim() != 2 or A.ndim() != 2:
+        if self.ndim != 2 or A.ndim != 2:
             raise NotImplementedError("matmul is only implemented for 2D arrays.")
 
         if self.fill_value != 0 or A.fill_value != 0:
