@@ -18,14 +18,14 @@ namespace sparray{
  * adapted from numpy/core/src/multiarray/descriptor.c
  */
 inline int
-_is_tuple_of_integers(PyObject *obj, index_type& idx)
+_is_tuple_of_integers(PyObject *obj, index_type& idx, int len)
 {
     PyObject *x;
 
     if (!PyTuple_Check(obj)) {
         return 0;
     }
-    if (PyTuple_GET_SIZE(obj) != idx.ndim()) {
+    if (PyTuple_GET_SIZE(obj) != len) {
         return 0;
     }
     for (int i = 0; i < PyTuple_GET_SIZE(obj); i++) {
@@ -47,7 +47,7 @@ _is_tuple_of_integers(PyObject *obj, index_type& idx)
  * is allowed or not.
  *
  * The dimensionality of `idx` and `arr` is NOT checked and it must be validated
- * before.
+ * beforehand.
  */
 template<typename T>
 inline PyObject*

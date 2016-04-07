@@ -109,7 +109,7 @@ cdef extern from "elementwise_ops.h" namespace "sparray":
 
 
 cdef extern from "util.h" namespace "sparray":
-    int _is_tuple_of_integers(object obj, index_type& idx)
+    int _is_tuple_of_integers(object obj, index_type& idx, int)
     object validate_index[T](index_type& idx,
                              const map_array_t[T] *m,
                              int is_shape_fixed)
@@ -251,7 +251,7 @@ cdef class MapArray:
         self.index_factory = new index_factory_t(nd)
 
         cdef index_type shp = self.index_factory.get_new()
-        if not _is_tuple_of_integers(shape, shp):
+        if not _is_tuple_of_integers(shape, shp, nd):
                 raise TypeError("Shape %s not undestood." % str(shape))
 
         # allocate memory on the correct type pointer
@@ -512,7 +512,7 @@ cdef class MapArray:
     def __getitem__(self, tpl):
         # no slicing, single-element access only
         cdef index_type idx = self.index_factory.get_new()
-        if not _is_tuple_of_integers(tpl, idx):
+        if not _is_tuple_of_integers(tpl, idx, self.index_factory.ndim()):
             raise IndexError("%s cannot be interpreted as an index into "
                              " an array." % str(tpl))
 
@@ -535,7 +535,7 @@ cdef class MapArray:
 
     def __setitem__(self, tpl, value):
         cdef index_type idx = self.index_factory.get_new()
-        if not _is_tuple_of_integers(tpl, idx):
+        if not _is_tuple_of_integers(tpl, idx, self.index_factory.ndim()):
             raise IndexError("%s cannot be interpreted as an index into "
                              " an array." % str(tpl))
         cdef int ival

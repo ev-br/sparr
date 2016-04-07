@@ -34,7 +34,7 @@ struct fixed_capacity
         return m_elem[j];
     };
 
-    int ndim() const { assert(m_initd); return (int)m_elem.size(); }
+    //int ndim() const { assert(m_initd); return (int)m_elem.size(); }
 
 };
 
@@ -45,12 +45,16 @@ typedef fixed_capacity<single_index_type> index_type;
 template<typename I=single_index_type>
 struct fixed_capacity_cmp 
 {
+    int m_ndim;
+
+    fixed_capacity_cmp(int num_dim) : m_ndim(num_dim) {}
     bool operator()(const fixed_capacity<I>& lhs,
                     const fixed_capacity<I>& rhs) const
     {
-        assert(lhs.ndim() == rhs.ndim());
+        assert((lhs.m_elem.size() == rhs.m_elem.size()) 
+               && ((int)lhs.m_elem.size() == m_ndim));      // XXX
 
-        for (int j=0; j < lhs.ndim(); ++j){
+        for (int j=0; j < m_ndim; ++j){
             I l = lhs[j], r = rhs[j];
             if(l > r){ return false; }
             else if (l < r){ return true; }

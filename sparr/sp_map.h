@@ -22,12 +22,17 @@ struct map_array_t
     map_array_t(const size_t num_dim = 2,
                 const T& fill_value = 0) : shape_(num_dim),
                                            fill_value_(fill_value),
-                                           m_ndim(num_dim){
+                                           m_ndim(num_dim),
+                                           data_(fixed_capacity_cmp<I>(num_dim)){
         for(size_t j=0; j < num_dim; ++j){
             shape_[j] = 0;
         }
     };
-    map_array_t(const map_array_t& other);
+    map_array_t(const map_array_t& other) : fill_value_(other.fill_value()),
+                                            m_ndim(other.ndim()),
+                                            data_(fixed_capacity_cmp<I>(other.ndim())){
+        copy_from(&other);
+    };
     template<typename S> void copy_from(const map_array_t<S, I> *src);
 
     size_t ndim() const { return m_ndim; }
@@ -59,10 +64,10 @@ struct map_array_t
     I _flat_index(const index_type& index) const;
  
     private:
-        map_type data_;
         index_type shape_;
         T fill_value_;
         int m_ndim;
+        map_type data_;
 };
 
 
@@ -115,13 +120,6 @@ struct operations
 
 
 /////////////////// IMPLEMENTATIONS of map_array_t methods.
-
-
-template<typename T, typename I>
-inline map_array_t<T, I>::map_array_t(const map_array_t<T, I>& other)
-{
-    copy_from(&other);
-}
 
 
 template<typename T, typename I>
