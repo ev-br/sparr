@@ -90,7 +90,16 @@ def test_comparisons():
     ma = MapArray.from_dense(a)
     
     with assert_raises(ValueError):
-        m + ma
+        m < ma
+
+
+def test_high_dim():
+    rndm = np.random.RandomState(1234)
+    arr = rndm.uniform(size=(2, 4, 3, 2))
+    m = MapArray.from_dense(arr)
+
+    assert_equal(arr.shape, m.shape)
+    assert_allclose(m.todense(), arr, atol=1e-15)
 
 
 if __name__ == "__main__":

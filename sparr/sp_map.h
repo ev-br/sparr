@@ -212,7 +212,18 @@ map_array_t<T, I>::_flat_index(const typename map_array_t<T, I>::index_type& ind
         return index[0]*shape_[1]*shape_[2] + index[1]*shape_[2] + index[2]; 
     }
     else{
-        throw std::runtime_error("oops");
+        index_type strides(ndim());
+        strides[ndim() - 1] = 1;
+        int j = ndim() - 1;
+        while(j--){ 
+            strides[j] = strides[j+1] * shape_[j+1]; 
+        }
+
+        I fff = 0;
+        for(size_t j=0; j < ndim(); ++j){
+            fff += strides[j]*index[j]; 
+        }
+        return fff;
     }
 }
 
