@@ -50,7 +50,8 @@
     //
     "matrix": {
          "numpy": ["1.10.4"],
-         "Cython": ["0.23"]
+         "Cython": ["0.23"],
+         "scipy": ["0.17"]
     },
 
     // Combinations of libraries/python versions can be excluded/included

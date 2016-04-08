@@ -2,6 +2,7 @@
 # See "Writing benchmarks" in the asv docs for more information.
 
 from sparr import MapArray as M
+from scipy.sparse import dok_matrix
 
 try:
     xrange
@@ -10,9 +11,12 @@ except NameError:
     xrange = range
 
 
-def map_poisson2d(n):
+def map_poisson2d(n, func_name):
     n2 = n*n
-    L = M(shape=(n2, n2))
+    if func_name == "map_array":
+        L = M(shape=(n2, n2))
+    elif func_name == "dok_matrix":
+        L = dok_matrix((n2, n2))
     for i in xrange(n):
         for j in xrange(n):
             k = i + n*j
@@ -30,30 +34,36 @@ def map_poisson2d(n):
 
 class BenchPoisson2D(object):
 
-    params = [10, 100, 1000]
+    params = ([10, 100, 1000], ['map_array', 'dok_matrix'])
 
-    def time_poisson2d(self, n):
-        xxx = map_poisson2d(n)
-    time_poisson2d.param_names = ['n']
+    def time_poisson2d(self, n, func_name):
+        xxx = map_poisson2d(n, func_name)
+    time_poisson2d.param_names = ['n', 'class']
+    time_poisson2d.timeout = 120.0
 
-    def peakmem_poisson2d(self, n):
-        xxx = map_poisson2d(n)
-    peakmem_poisson2d.param_names = ['n']
+    def peakmem_poisson2d(self, n, func_name):
+        xxx = map_poisson2d(n, func_name)
+    peakmem_poisson2d.param_names = ['n', 'class']
+    peakmem_poisson2d.timeout = 120.0
 
 
 class GetSetPoisson2D(object):
 
-    params = [10, 100, 1000]
+    params = ([10, 100, 1000], ['map_array', 'dok_matrix'])
 
-    def setup(self, n):
-        self.map_array = map_poisson2d(n)
+    def setup(self, n, func_name):
+        self.map_array = map_poisson2d(n, func_name)
         self.idx = self.map_array.shape[0] // 2
 
-    def time_getitem_single(self, n):
+    def time_getitem_single(self, n, func_name):
         self.map_array[self.idx, -1]
+    time_getitem_single.param_names = ['n', 'class']
+    time_getitem_single.timeout = 240.0
 
-    def time_setitem_single(self, n):
+    def time_setitem_single(self, n, func_name):
         self.map_array[self.idx, -1] = 101
+    time_setitem_single.param_names = ['n', 'class']
+    time_setitem_single.timeout = 240.0
 
 
 #class TimeSuite:
