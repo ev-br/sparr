@@ -26,10 +26,10 @@ array([[   0.,    0.,    0.,   42.],
 To have an array of fixed shape, set the `is_shape_fixed` attribute to ``True``,
 or provide the shape explicitly in the constructor:
 
->>> m = M(shape=(2, 3))
+>>> m = M(shape=(2, 3, 4))
 >>> m.is_shape_fixed
 True
->>> m[4, 5] = 6
+>>> m[4, 5, 1] = 6
 Traceback (most recent call last)
 ...
 IndexError: index 4 is out of bounds for axis 0 with size 2
@@ -71,7 +71,7 @@ Installation
 This isn't much to package really, so it's just very standard::
 
     $ python setup.py build_ext -i
-    $ nosetests test_basic.py
+    $ nosetests sparr/tests
 
 
 Building requires ``cython`` and ``numpy``, testing needs ``nose``. 
