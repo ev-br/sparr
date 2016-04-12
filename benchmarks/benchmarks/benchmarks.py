@@ -5,6 +5,11 @@ from sparr import MapArray as M
 from scipy.sparse import dok_matrix
 
 try:
+    from pysparse.sparse import spmatrix
+except:
+    pass
+
+try:
     xrange
 except NameError:
     # python 3
@@ -17,6 +22,8 @@ def map_poisson2d(n, func_name):
         L = M(shape=(n2, n2))
     elif func_name == "dok_matrix":
         L = dok_matrix((n2, n2))
+    elif func_name == "ll_mat":
+        L = spmatrix.ll_mat(n2, n2)
     for i in xrange(n):
         for j in xrange(n):
             k = i + n*j
@@ -34,14 +41,22 @@ def map_poisson2d(n, func_name):
 
 class BenchPoisson2D(object):
 
-    params = ([10, 100], ['map_array', 'dok_matrix'])
+    params = ([10, 100], ['map_array', 'dok_matrix', 'll_mat'])
 
     def time_poisson2d(self, n, func_name):
         xxx = map_poisson2d(n, func_name)
     time_poisson2d.param_names = ['n', 'class']
     time_poisson2d.timeout = 120.0
 
+    def peakmem_poisson2d(self, n, func_name):
+        xxx = map_poisson2d(n, func_name)
+    peakmem_poisson2d.param_names = ['n', 'class']
+    peakmem_poisson2d.timeout = 120.0
 
+    def mem_poisson2d(self, n, func_name):
+        xxx = map_poisson2d(n, func_name)
+    mem_poisson2d.param_names = ['n', 'class']
+    mem_poisson2d.timeout = 120.0
 
 #class TimeSuite:
 #    """
