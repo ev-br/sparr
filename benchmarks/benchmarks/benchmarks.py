@@ -34,36 +34,13 @@ def map_poisson2d(n, func_name):
 
 class BenchPoisson2D(object):
 
-    params = ([10, 100, 1000], ['map_array', 'dok_matrix'])
+    params = ([10, 100], ['map_array', 'dok_matrix'])
 
     def time_poisson2d(self, n, func_name):
         xxx = map_poisson2d(n, func_name)
     time_poisson2d.param_names = ['n', 'class']
     time_poisson2d.timeout = 120.0
 
-    def peakmem_poisson2d(self, n, func_name):
-        xxx = map_poisson2d(n, func_name)
-    peakmem_poisson2d.param_names = ['n', 'class']
-    peakmem_poisson2d.timeout = 120.0
-
-
-class GetSetPoisson2D(object):
-
-    params = ([10, 100, 1000], ['map_array', 'dok_matrix'])
-
-    def setup(self, n, func_name):
-        self.map_array = map_poisson2d(n, func_name)
-        self.idx = self.map_array.shape[0] // 2
-
-    def time_getitem_single(self, n, func_name):
-        self.map_array[self.idx, -1]
-    time_getitem_single.param_names = ['n', 'class']
-    time_getitem_single.timeout = 240.0
-
-    def time_setitem_single(self, n, func_name):
-        self.map_array[self.idx, -1] = 101
-    time_setitem_single.param_names = ['n', 'class']
-    time_setitem_single.timeout = 240.0
 
 
 #class TimeSuite:
