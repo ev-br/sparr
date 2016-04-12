@@ -5,6 +5,12 @@ from sparr import MapArray as M
 from scipy.sparse import dok_matrix
 
 try:
+    # https://github.com/scipy/scipy/pull/6004/
+    from scipy.sparse import fast_lil_matrix
+except:
+    pass
+
+try:
     from pysparse.sparse import spmatrix
 except:
     pass
@@ -24,6 +30,8 @@ def map_poisson2d(n, func_name):
         L = dok_matrix((n2, n2))
     elif func_name == "ll_mat":
         L = spmatrix.ll_mat(n2, n2)
+    elif func_name == "fast_lil":
+        L = fast_lil_matrix((n2, n2))
     for i in xrange(n):
         for j in xrange(n):
             k = i + n*j
@@ -41,7 +49,7 @@ def map_poisson2d(n, func_name):
 
 class BenchPoisson2D(object):
 
-    params = ([10, 100], ['map_array', 'dok_matrix', 'll_mat'])
+    params = ([10, 100, 300], ['map_array', 'll_mat', 'fast_lil', 'dok_matrix'])
 
     def time_poisson2d(self, n, func_name):
         xxx = map_poisson2d(n, func_name)
