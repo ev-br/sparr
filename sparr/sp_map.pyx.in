@@ -695,6 +695,11 @@ cdef class MapArray:
         raise NotImplementedError("In-place matmul is not implemented. "
                                   "Use a = a @ b instead of a @= b.")
 
+    def __array_prepare__(self, array, context=None):
+        print("Array_prepare!", array, context)
+        return self.todense()
+    
+
 ##### implementations
 
 def _mmul_impl(MapArray self not None,
