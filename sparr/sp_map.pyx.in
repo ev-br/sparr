@@ -695,10 +695,14 @@ cdef class MapArray:
         raise NotImplementedError("In-place matmul is not implemented. "
                                   "Use a = a @ b instead of a @= b.")
 
-    def __array_prepare__(self, array, context=None):
-        print("Array_prepare!", array, context)
+    def __array__(self, dtype=None):
+        print("__Array__!", dtype)
         return self.todense()
-    
+
+    def __array_wrap__(self, array, context=None):
+        print('Wrap!', array, context)
+        return array
+
 
 ##### implementations
 
