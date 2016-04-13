@@ -102,5 +102,18 @@ def test_high_dim():
     assert_allclose(m.todense(), arr, atol=1e-15)
 
 
+def test_to_coo():
+    m = MapArray(ndim=4)
+    m[0, 0, 0, 0] = 21.
+    m[1, 2, 3, 4] = 22.
+    m[2, 3, 4, 5] = 23.
+
+    data, (i0, i1, i2, i3) = m.to_coo()
+    assert_allclose(data, [21., 22., 23.], atol=1e-15)
+    assert_equal(i0, [0, 1, 2])
+    assert_equal(i1, [0, 2, 3])
+    assert_equal(i2, [0, 3, 4])
+    assert_equal(i3, [0, 4, 5])
+
 if __name__ == "__main__":
     run_module_suite()

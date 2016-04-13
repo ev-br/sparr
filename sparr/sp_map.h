@@ -91,7 +91,7 @@ struct operations
     // convert to a COO triplet of (data, row, column) arrays.
     // Caller's responsible for allocating memory.
     void to_coo(const map_array_t<T, I>* src,
-                void* data, void* row, void* clmn,
+                void* data, void* stacked_indices,
                 const I num_elem);
 
     // x <- alpha f(x) + beta x
@@ -256,24 +256,18 @@ operations<T, I>::todense(const map_array_t<T, I>* src,
 template<typename T, typename I>
 inline void
 operations<T, I>::to_coo(const map_array_t<T, I>* src,
-                         void* data, void* row, void* clmn,
+                         void* data, void* stacked_indices,
                          const I num_elem)
 {
-    assert(src->ndim() == 2);
-
     if (!src){ throw std::invalid_argument("to_coo: src is NULL."); }
 
     if (!data)
         throw std::invalid_argument("to_coo: data is NULL.");
     T *_data = static_cast<T*>(data);
 
-    if (!row)
-        throw std::invalid_argument("to_coo: row is NULL.");
-    I *_row = static_cast<I*>(row);
-
-    if (!clmn)
-        throw std::invalid_argument("to_coo: clmn is NULL.");
-    I *_clmn = static_cast<I*>(clmn);
+    if (!stacked_indices)
+        throw std::invalid_argument("to_coo: indices is NULL.");
+    I *_indices = static_cast<I*>(stacked_indices);
 
     if (num_elem < 0)
         throw std::runtime_error("num_elem < 0");
@@ -286,8 +280,10 @@ operations<T, I>::to_coo(const map_array_t<T, I>* src,
         assert(j < num_elem);
         idx = it->first;
         _data[j] = it->second;
-        _row[j] = idx[0];
-        _clmn[j] = idx[1];
+
+        for(size_t d=0; d < src->ndim(); ++d){
+            _indices[j + d*num_elem] = idx[d];
+        }
         j += 1;
     }
 }
