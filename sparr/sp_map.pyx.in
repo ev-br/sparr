@@ -62,7 +62,7 @@ cdef extern from "sp_map.h" namespace "sparray":
                      void* dest,
                      const single_index_type num_elem) except +
         void to_coo(const map_array_t[T] *src,
-                    void *data, void *row, void *clmn,
+                    void *data, void *stacked_indices,
                     const single_index_type num_elem) except +
 
         # $x <- alpha f(x) + beta x$
@@ -465,24 +465,29 @@ cdef class MapArray:
         This function ignores the `fill_value`.
 
         """
-        if self.ndim != 2:
-            raise NotImplementedError("to_coo is only implemented for 2D arrays.")
-
+        cdef int nd
+        cdef npy_intp num_elem
         cdef npy_intp[1] sh
-        cdef cnp.ndarray row, clmn, data
+        cdef cnp.ndarray data, stacked_indices
 
         {{for NUM, CT in zip(TNUMS, CTYPES)}}
         if self.typenum == {{NUM}}:
-            sh[0] = <npy_intp>self.p.{{CT}}_ptr.count_nonzero()
-            row = PyArray_SimpleNew(1, sh, cnp.NPY_INTP)   # XXX: int32 indices?
-            clmn = PyArray_SimpleNew(1, sh, cnp.NPY_INTP)
+            num_elem = <npy_intp>self.p.{{CT}}_ptr.count_nonzero()
+            sh[0] = num_elem
             data = PyArray_SimpleNew(1, sh, {{NUM}})
+
+            # now stack the indices: row[0], ..., row[n], col[0], ..., col[n], ...
+            # (where `n` is the number of nonzero elements)
+            nd = self.p.{{CT}}_ptr.ndim()
+            sh[0] *= nd
+
+            stacked_indices = PyArray_SimpleNew(1, sh, cnp.NPY_INTP) # XXX: int32 indices?
             op_{{CT}}.to_coo(self.p.{{CT}}_ptr,
                              PyArray_DATA(data),
-                             PyArray_DATA(row),
-                             PyArray_DATA(clmn),
-                             PyArray_SIZE(data))
-            return data, (row, clmn)
+                             PyArray_DATA(stacked_indices),
+                             num_elem)
+            indices = tuple(stacked_indices[j*num_elem : (j+1)*num_elem] for j in range(nd))
+            return data, indices
         {{endfor}}
 
     @classmethod
