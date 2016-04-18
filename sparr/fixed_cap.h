@@ -34,7 +34,7 @@ struct fixed_capacity
         return m_elem[j];
     };
 
-    //int ndim() const { assert(m_initd); return (int)m_elem.size(); }
+    int ndim() const { assert(m_initd); return (int)m_elem.size(); }
 
 };
 
