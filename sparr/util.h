@@ -3,7 +3,7 @@
 #include <Python.h>
 #include "numpy/ndarrayobject.h"
 #include "fixed_cap.h"
-#include "sp_map.h"
+#include "views.h"
 
 
 /*
@@ -49,12 +49,12 @@ _is_tuple_of_integers(PyObject *obj, index_type& idx, int len)
  * The dimensionality of `idx` and `arr` is NOT checked and it must be validated
  * beforehand.
  */
-template<typename T>
+template<typename T, typename I>
 inline PyObject*
-validate_index(index_type& idx, const map_array_t<T> *arr, int is_shape_fixed)
+validate_index(index_type& idx, const abstract_view_t<T, I> *arr, int is_shape_fixed)
 {
     index_type shp = arr->shape();
-    for(size_t j = 0; j < arr->ndim(); ++j){
+    for(int j = 0; j < arr->ndim(); ++j){
         if (idx[j] < 0){
             idx[j] += shp[j];
         }

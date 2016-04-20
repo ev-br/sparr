@@ -63,8 +63,6 @@ struct fixed_capacity_cmp
     }
 };
 
-std::string bool_outp(const bool& x){ return x ? "true" : "false"; }
-
 
 // The factory which knows the ndim and creates instances of fixed_capacity
 // of this size.

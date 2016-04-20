@@ -404,7 +404,7 @@ class ArithmeticsMixin(object):
         assert_allclose(ma2.todense(),
                         self.op(ma.todense(), ma.todense()), atol=1e-15)
 
-    @skipif(not HAVE_SCIPY)
+    @skipif(not HAVE_SCIPY, "scipy is not available")
     def test_sparse_scipy_sparse_interop(self):
         # MapArray + csr_matrix should work
         ma1 = self.ma.copy()
@@ -427,7 +427,7 @@ class ArithmeticsMixin(object):
                         self.op(self.ma.todense(), csr.toarray()), atol=1e-15)
 
     # multiplication fails :-(
-    @skipif(not HAVE_SCIPY)
+    @skipif(not HAVE_SCIPY, "scipy is not available")
     def test_scipy_sparse_sparse_interop(self):
 
         if self.op == operator.mul:

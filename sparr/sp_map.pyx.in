@@ -4,95 +4,26 @@
 
 import numpy as np
 cimport numpy as cnp
-from numpy cimport (PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE,
-                    npy_intp, npy_bool, npy_byte, npy_ubyte,
-                    npy_short, npy_int, npy_long, npy_longlong,
-                    npy_ushort, npy_uint, npy_ulong, npy_ulonglong,
-                    npy_cdouble)
+from numpy cimport (npy_intp, npy_bool, npy_byte, npy_ubyte, npy_short, npy_int,
+                    npy_long, npy_longlong, npy_ushort, npy_uint, npy_ulong,
+                    npy_ulonglong, npy_cdouble)
+from numpy cimport (NPY_BYTE, NPY_SHORT, NPY_INT, NPY_LONG, NPY_LONGLONG,
+                    NPY_UBYTE, NPY_USHORT, NPY_UINT, NPY_ULONG, NPY_ULONGLONG,
+                    NPY_FLOAT, NPY_DOUBLE, NPY_CDOUBLE, NPY_INTP, NPY_BOOL)
+from numpy cimport PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE
+
 from cpython.object cimport PyObject_IsTrue, PyObject_RichCompare
 from cpython.complex cimport (PyComplex_Check, PyComplex_FromDoubles,
                               PyComplex_RealAsDouble, PyComplex_ImagAsDouble)
 
-# Indexing type declarations
-from sparr.common_types cimport single_index_type
+from sparr.fixed_cap cimport index_type, index_factory_t, FC_ELEMS
+from sparr.views cimport (map_array_t, abstract_view_t, map_view_t,
+                          todense, to_coo, inplace_binop, apply_binop, apply_mmul)
 
 cdef extern from "complex_ops.h":
     cdef cppclass npy_cdouble_wrapper:
         double real
         double imag
-
-cdef extern from "fixed_cap.h" namespace "sparray":
-    cdef cppclass index_type:
-        index_type()
-        single_index_type& operator[](size_t j) except +
-
-    # this creates index_type instances with fixed size
-    cdef cppclass index_factory_t:
-        index_factory_t(const int n)
-        int ndim() const
-        index_type get_new() except +
-
-cdef extern from "fixed_cap.h":
-    single_index_type[] FC_ELEMS(index_type) nogil
-
-cdef extern from "sp_map.h" namespace "sparray":
-    cdef cppclass map_array_t[T]:
-        map_array_t() except +
-        map_array_t(const int ndim) except +
-        map_array_t(const map_array_t&) except +
-        void copy_from[S](const map_array_t[S]*) except +
-
-        size_t ndim() const
-        index_type shape() const
-        index_type get_min_shape() const
-        void set_shape(const index_type&) except +
-
-        T fill_value() const
-        void set_fill_value(T value)
-
-        size_t count_nonzero() const
-
-        # single element accessors
-        T get_one(const index_type& idx) const 
-        void set_one(const index_type& idx, const T& value)
-
-
-    cdef cppclass operations[T]:
-        void todense(const map_array_t[T] *src,
-                     void* dest,
-                     const single_index_type num_elem) except +
-        void to_coo(const map_array_t[T] *src,
-                    void *data, void *stacked_indices,
-                    const single_index_type num_elem) except +
-
-        # $x <- alpha f(x) + beta x$
-        # default is alpha=1 and beta=0
-        void inplace_unary(map_array_t[T] *self,
-                           T (*op)(T x))
-        void inplace_unary(map_array_t[T] *self,
-                           T (*op)(T x),
-                           const T alpha, const T beta)
-
-        # $x <- alpha f(x, y) + beta x$, \foreach x in self, \foreach y in other
-        void inplace_binop(T (*binop)(T x, T y),
-                           map_array_t[T] *self,
-                           const map_array_t[T] *other) except +
-        void inplace_binop(T (*binop)(T x, T y),
-                           map_array_t[T] *self,
-                           const map_array_t[T] *other,
-                           const T alpha, const T beta) except +
-
-        # $z <- binop(x, y)$ \foreach x in arg1, \foreach y in arg2
-        void apply_binop[S](T (*binop)(S x, S y),
-                         map_array_t[T] *self,
-                         const map_array_t[S] *arg1,
-                         const map_array_t[S] *arg2) except +
-
-        # C <- A @ B
-        void apply_mmul(map_array_t[T] *C,
-                        const map_array_t[T] *A,
-                        const map_array_t[T] *B) except +
-
 
 # Elementary elementwise operations
 cdef extern from "elementwise_ops.h" namespace "sparray":
@@ -110,8 +41,8 @@ cdef extern from "elementwise_ops.h" namespace "sparray":
 
 cdef extern from "util.h" namespace "sparray":
     int _is_tuple_of_integers(object obj, index_type& idx, int)
-    object validate_index[T](index_type& idx,
-                             const map_array_t[T] *m,
+    object validate_index[T, I](index_type& idx,
+                             const abstract_view_t[T, I] *m,
                              int is_shape_fixed)
 
 
@@ -119,29 +50,91 @@ cdef extern from "util.h" namespace "sparray":
 CTYPES_GEN = ['npy_byte', 'npy_short', 'npy_int', 'npy_long', 'npy_longlong',
               'npy_ubyte', 'npy_ushort', 'npy_uint', 'npy_ulong', 'npy_ulonglong',
               'float', 'double']
-TNUMS_GEN = ['cnp.NPY_BYTE', 'cnp.NPY_SHORT', 'cnp.NPY_INT', 'cnp.NPY_LONG', 'cnp.NPY_LONGLONG',
-             'cnp.NPY_UBYTE', 'cnp.NPY_USHORT', 'cnp.NPY_UINT', 'cnp.NPY_ULONG', 'cnp.NPY_ULONGLONG',
-             'cnp.NPY_FLOAT', 'cnp.NPY_DOUBLE']
+TNUMS_GEN = ['NPY_BYTE', 'NPY_SHORT', 'NPY_INT', 'NPY_LONG', 'NPY_LONGLONG',
+             'NPY_UBYTE', 'NPY_USHORT', 'NPY_UINT', 'NPY_ULONG', 'NPY_ULONGLONG',
+             'NPY_FLOAT', 'NPY_DOUBLE']
 CONDS_GEN = ['if'] + ['elif']*(len(TNUMS_GEN) - 1)
 
 # add types which need special casing (eg get/set)
 CTYPES = CTYPES_GEN + ['npy_bool', 'npy_cdouble_wrapper']
-TNUMS = TNUMS_GEN + ['cnp.NPY_BOOL', 'cnp.NPY_CDOUBLE']
+TNUMS = TNUMS_GEN + ['NPY_BOOL', 'NPY_CDOUBLE']
 CONDS = CONDS_GEN + ['elif', 'elif']
 }}
-
-
-# instantiate the 'operations' structs for the allowed types
-{{for CT in CTYPES}}
-cdef operations[{{CT}}] op_{{CT}}
-{{endfor}}
 
 
 # the main polymorphism kludge :-)
 cdef union union_t:
 {{for CT in CTYPES}}
-    map_array_t[{{CT}}] *{{CT}}_ptr
+    map_array_t[{{CT}}, npy_intp] *{{CT}}_ptr
 {{endfor}}
+
+
+cdef union view_union_t:
+{{for ct in CTYPES}}
+    abstract_view_t[{{ct}}, npy_intp] *{{ct}}_ptr
+{{endfor}}
+
+
+cdef class Holder:
+    """Only holds the map_array_t member. No python exposure.
+    """
+    cdef union_t p
+    cdef int typenum
+
+    def __cinit__(self, int typenum, int nd):
+        self.typenum = typenum
+
+        # allocate memory on the correct type pointer
+        {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} self.typenum == {{NUM}}:
+            self.p.{{CT}}_ptr = new map_array_t[{{CT}}, npy_intp](nd)
+        {{endfor}}
+        else:
+            dtype = np.dtype(cnp.PyArray_TypeObjectFromType(self.typenum))
+            raise TypeError("dtype %s  not supported." % dtype)
+
+    def __dealloc__(self):
+        {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} self.typenum == {{NUM}}:
+            del self.p.{{CT}}_ptr
+        {{endfor}}
+        # NB: this if-then-else is deliberately not closed off with an error.
+        # The reason is that if a dtype lookup fails in __cinit__, it raises
+        # a TypeError, and then __dealloc__ is called by Cython anyway.
+        # The result is a spurious message from __dealloc__ saying that
+        # the error was ignored.
+
+
+cdef class View:
+    """Only holds the map_array_t member. No python exposure.
+    """
+    cdef view_union_t p
+    cdef int typenum
+
+    def __cinit__(self, int typenum, Holder holder):
+        self.typenum = typenum
+
+        assert typenum == holder.typenum
+
+        # allocate memory on the correct type pointer
+        {{for num, ct, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} self.typenum == {{num}}:
+            self.p.{{ct}}_ptr = new map_view_t[{{ct}}, npy_intp](holder.p.{{ct}}_ptr)
+        {{endfor}}
+        else:
+            dtype = np.dtype(cnp.PyArray_TypeObjectFromType(self.typenum))
+            raise TypeError("dtype %s  not supported." % dtype)
+
+    def __dealloc__(self):
+        {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} self.typenum == {{NUM}}:
+            del self.p.{{CT}}_ptr
+        {{endfor}}
+        # NB: this if-then-else is deliberately not closed off with an error.
+        # The reason is that if a dtype lookup fails in __cinit__, it raises
+        # a TypeError, and then __dealloc__ is called by Cython anyway.
+        # The result is a spurious message from __dealloc__ saying that
+        # the error was ignored.
 
 
 cdef class MapArray:
@@ -203,7 +196,9 @@ cdef class MapArray:
     (array([  1765.,  10202.]), (array([0, 1]), array([3, 2])))
 
     """
-    cdef union_t p
+    cdef Holder holder
+    cdef View view
+    cdef MapArray base
     cdef int typenum
     cdef int _is_shape_fixed
     cdef index_factory_t *index_factory
@@ -255,35 +250,22 @@ cdef class MapArray:
                 raise TypeError("Shape %s not undestood." % str(shape))
 
         # allocate memory on the correct type pointer
+        self.holder = Holder(self.typenum, nd)
+        self.view = View(self.typenum, self.holder)
+        self.base = None
+
         {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
         {{IF}} self.typenum == {{NUM}}:
-            self.p.{{CT}}_ptr = new map_array_t[{{CT}}](nd)
+            self.view.p.{{CT}}_ptr.set_shape(shp)
         {{endfor}}
         else:
             raise TypeError("dtype %s  not supported." % dtype)
 
-        # Finally, propagate the shape to lower level
-        {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
-        {{IF}} self.typenum == {{NUM}}:
-            self.p.{{C}}_ptr.set_shape(shp)
-        {{endfor}}
-        else:
-            raise TypeError("shape setter: dtype = %s unhandled." % self.dtype)
-
-        #handle fill_value
+        # handle fill_value
         self.fill_value = fill_value
 
     def __dealloc__(self):
         del self.index_factory
-        {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
-        {{IF}} self.typenum == {{NUM}}:
-            del self.p.{{CT}}_ptr
-        {{endfor}}
-        # NB: this if-then-else is deliberately not closed off with an error.
-        # The reason is that if a dtype lookup fails in __cinit__, it raises
-        # a TypeError, and then __dealloc__ is called by Cython anyway.
-        # The result is a spurious message from __dealloc__ saying that
-        # the error was ignored.
 
     #### Public interface accessors #####
 
@@ -297,7 +279,7 @@ cdef class MapArray:
             cdef int nd
             {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
             {{IF}} self.typenum == {{NUM}}:
-                nd = self.p.{{C}}_ptr.ndim()
+                nd = self.view.p.{{C}}_ptr.ndim()
                 if nd != self.index_factory.ndim():
                     raise RuntimeError("Panic: self._ndim = %s != ptr.ndim = %s."
                                         % (self.index_factory.ndim(), nd))
@@ -311,12 +293,12 @@ cdef class MapArray:
             cdef npy_cdouble_wrapper z
             {{for NUM, C, IF in zip(TNUMS_GEN, CTYPES_GEN, CONDS_GEN)}}
             {{IF}} self.typenum == {{NUM}}:
-                return self.p.{{C}}_ptr.fill_value()
+                return self.view.p.{{C}}_ptr.fill_value()
             {{endfor}}
-            elif self.typenum == cnp.NPY_BOOL:
-                return self.p.npy_bool_ptr.fill_value() != 0
-            elif self.typenum == cnp.NPY_CDOUBLE:
-                z = self.p.npy_cdouble_wrapper_ptr.fill_value()
+            elif self.typenum == NPY_BOOL:
+                return self.view.p.npy_bool_ptr.fill_value() != 0
+            elif self.typenum == NPY_CDOUBLE:
+                z = self.view.p.npy_cdouble_wrapper_ptr.fill_value()
                 return PyComplex_FromDoubles(z.real, z.imag)
             else:
                 raise TypeError("fill_value: dtype = %s unhandled." % self.dtype)
@@ -326,20 +308,20 @@ cdef class MapArray:
             cdef npy_cdouble_wrapper z
             {{for NUM, C, IF in zip(TNUMS_GEN, CTYPES_GEN, CONDS_GEN)}}
             {{IF}} self.typenum == {{NUM}}:
-                self.p.{{C}}_ptr.set_fill_value(value)
+                self.view.p.{{C}}_ptr.set_fill_value(value)
             {{endfor}}
-            elif self.typenum == cnp.NPY_BOOL:
+            elif self.typenum == NPY_BOOL:
                 ival = PyObject_IsTrue(value)
                 if ival == -1:
                     raise ValueError("Cannot interpet %s as a boolean" % value)
-                self.p.npy_bool_ptr.set_fill_value(ival)
-            elif self.typenum == cnp.NPY_CDOUBLE:
+                self.view.p.npy_bool_ptr.set_fill_value(ival)
+            elif self.typenum == NPY_CDOUBLE:
                 ival = PyComplex_Check(value)
                 if ival == -1:
                     raise ValueError("Cannot interpret %s as a complex number" % value)
                 z.real = PyComplex_RealAsDouble(value)
                 z.imag = PyComplex_ImagAsDouble(value)
-                self.p.npy_cdouble_wrapper_ptr.set_fill_value(z)
+                self.view.p.npy_cdouble_wrapper_ptr.set_fill_value(z)
             else:
                 raise TypeError("fill_value: dtype = %s unhandled." % self.dtype)
 
@@ -349,7 +331,7 @@ cdef class MapArray:
             cdef int nd = self.index_factory.ndim()
             {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
             {{IF}} self.typenum == {{NUM}}:
-                sh = self.p.{{C}}_ptr.shape()
+                sh = self.view.p.{{C}}_ptr.shape()
                 return tuple(sh[i] for i in range(nd))
             {{endfor}}
             else:
@@ -365,7 +347,7 @@ cdef class MapArray:
     def count_nonzero(self):
         {{for NUM, C, IF in zip(TNUMS, CTYPES, CONDS)}}
         {{IF}} self.typenum == {{NUM}}:
-            return self.p.{{C}}_ptr.count_nonzero()
+            return self.view.p.{{C}}_ptr.count_nonzero()
         {{endfor}}
         raise TypeError("count_nonzero: dtype = %s unhandled." % self.dtype)
 
@@ -390,12 +372,12 @@ cdef class MapArray:
 
         cdef int typenum_src = self.typenum
         cdef int typenum_dest = newobj.typenum
-        {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
-        {{IF}} typenum_src == {{NUM}}:
+        {{for num, ct, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} typenum_src == {{num}}:
             # found self.dtype, on to the dest dtype now
-            {{for NUM1, CT1, IF1 in zip(TNUMS, CTYPES, CONDS)}}
-            {{IF1}} typenum_dest == {{NUM1}}:
-                newobj.p.{{CT1}}_ptr.copy_from[{{CT}}](self.p.{{CT}}_ptr)
+            {{for num1, ct1, IF1 in zip(TNUMS, CTYPES, CONDS)}}
+            {{IF1}} typenum_dest == {{num1}}:
+                newobj.holder.p.{{ct1}}_ptr.copy_from[{{ct}}, npy_intp](self.holder.p.{{ct}}_ptr)
                 return newobj
             {{endfor}}
         {{endfor}}
@@ -423,19 +405,19 @@ cdef class MapArray:
     def todense(self):
         """Return the dense array representation of self.
 
-        Construct a 2D numpy array of matching shape, dtype and data.
+        Construct a numpy array of matching shape, dtype and data.
 
         """
         cdef int nd
         cdef cnp.ndarray a
 
-        {{for NUM, CT in zip(TNUMS, CTYPES)}}
-        if self.typenum == {{NUM}}:
-            nd = <int>self.p.{{CT}}_ptr.ndim()
+        {{for num, ct in zip(TNUMS, CTYPES)}}
+        if self.typenum == {{num}}:
+            nd = <int>self.view.p.{{ct}}_ptr.ndim()
             a = PyArray_SimpleNew(nd,
-                                  <npy_intp*>FC_ELEMS(self.p.{{CT}}_ptr.shape()),
-                                  {{NUM}})
-            op_{{CT}}.todense(self.p.{{CT}}_ptr, PyArray_DATA(a), PyArray_SIZE(a))
+                                  <npy_intp*>FC_ELEMS(self.view.p.{{ct}}_ptr.shape()),
+                                  {{num}})
+            todense[{{ct}}, npy_intp](self.view.p.{{ct}}_ptr, PyArray_DATA(a), PyArray_SIZE(a))
             return a
         {{endfor}}
         raise TypeError("todense: never be here. dtype = " % self.dtype)
@@ -470,19 +452,19 @@ cdef class MapArray:
         cdef npy_intp[1] sh
         cdef cnp.ndarray data, stacked_indices
 
-        {{for NUM, CT in zip(TNUMS, CTYPES)}}
-        if self.typenum == {{NUM}}:
-            num_elem = <npy_intp>self.p.{{CT}}_ptr.count_nonzero()
+        {{for num, ct in zip(TNUMS, CTYPES)}}
+        if self.typenum == {{num}}:
+            num_elem = <npy_intp>self.view.p.{{ct}}_ptr.count_nonzero()
             sh[0] = num_elem
-            data = PyArray_SimpleNew(1, sh, {{NUM}})
+            data = PyArray_SimpleNew(1, sh, {{num}})
 
             # now stack the indices: row[0], ..., row[n], col[0], ..., col[n], ...
             # (where `n` is the number of nonzero elements)
-            nd = self.p.{{CT}}_ptr.ndim()
+            nd = self.view.p.{{ct}}_ptr.ndim()
             sh[0] *= nd
 
-            stacked_indices = PyArray_SimpleNew(1, sh, cnp.NPY_INTP) # XXX: int32 indices?
-            op_{{CT}}.to_coo(self.p.{{CT}}_ptr,
+            stacked_indices = PyArray_SimpleNew(1, sh, NPY_INTP)
+            to_coo[{{ct}}, npy_intp](self.view.p.{{ct}}_ptr,
                              PyArray_DATA(data),
                              PyArray_DATA(stacked_indices),
                              num_elem)
@@ -512,6 +494,14 @@ cdef class MapArray:
             self[r, c] = val
         return self
 
+
+###    def _make_view(self):
+###        m = MapArray(self.shape, self.ndim, self.fill_value, self.dtype)
+###        m.holder = self.holder
+###        m.base = self
+###        #m.own_data = False
+###        return m
+
     ##### Single element access #####
 
     def __getitem__(self, tpl):
@@ -520,21 +510,23 @@ cdef class MapArray:
         if not _is_tuple_of_integers(tpl, idx, self.index_factory.ndim()):
             raise IndexError("%s cannot be interpreted as an index into "
                              " an array." % str(tpl))
+###            # XXX: this is effectively self[...]
+###            return self._make_view()
 
         {{for NUM, CT in zip(TNUMS_GEN, CTYPES_GEN)}}
         if self.typenum == {{NUM}}:
-            validate_index[{{CT}}](idx, self.p.{{CT}}_ptr, True)
-            return self.p.{{CT}}_ptr.get_one(idx)
+            validate_index[{{CT}}, npy_intp](idx, self.view.p.{{CT}}_ptr, True)
+            return self.view.p.{{CT}}_ptr.get_one(idx)
 
         {{endfor}}
-        if self.typenum == cnp.NPY_BOOL:
-            validate_index[npy_bool](idx, self.p.npy_bool_ptr, True)
-            return self.p.npy_bool_ptr.get_one(idx) != 0
+        if self.typenum == NPY_BOOL:
+            validate_index[npy_bool, npy_intp](idx, self.view.p.npy_bool_ptr, True)
+            return self.view.p.npy_bool_ptr.get_one(idx) != 0
 
         cdef npy_cdouble_wrapper z
-        if self.typenum == cnp.NPY_CDOUBLE:
-            validate_index[npy_cdouble_wrapper](idx, self.p.npy_cdouble_wrapper_ptr, True)
-            z = self.p.npy_cdouble_wrapper_ptr.get_one(idx)
+        if self.typenum == NPY_CDOUBLE:
+            validate_index[npy_cdouble_wrapper, npy_intp](idx, self.view.p.npy_cdouble_wrapper_ptr, True)
+            z = self.view.p.npy_cdouble_wrapper_ptr.get_one(idx)
             return PyComplex_FromDoubles(z.real, z.imag)
         raise TypeError("__getitem__: dtype = %s not understood." % self.dtype)
 
@@ -546,29 +538,29 @@ cdef class MapArray:
         cdef int ival
         cdef npy_cdouble_wrapper z
 
-        {{for NUM, CT, IF in zip(TNUMS_GEN, CTYPES_GEN, CONDS_GEN)}}
-        {{IF}} self.typenum == {{NUM}}:
-            validate_index[{{CT}}](idx, self.p.{{CT}}_ptr, self._is_shape_fixed)
-            self.p.{{CT}}_ptr.set_one(idx, value)
+        {{for num, ct, IF in zip(TNUMS_GEN, CTYPES_GEN, CONDS_GEN)}}
+        {{IF}} self.typenum == {{num}}:
+            validate_index[{{ct}}, npy_intp](idx, self.view.p.{{ct}}_ptr, self._is_shape_fixed)
+            self.view.p.{{ct}}_ptr.set_one(idx, value)
 
         {{endfor}}
-        elif self.typenum == cnp.NPY_BOOL:
-            validate_index[npy_bool](idx, self.p.npy_bool_ptr, self._is_shape_fixed)
+        elif self.typenum == NPY_BOOL:
+            validate_index[npy_bool, npy_intp](idx, self.view.p.npy_bool_ptr, self._is_shape_fixed)
             ival = PyObject_IsTrue(value)
             if ival == -1:
                 raise ValueError("Cannot interpet %s as a boolean" % value)
-            self.p.npy_bool_ptr.set_one(idx, ival)
+            self.view.p.npy_bool_ptr.set_one(idx, ival)
 
-        elif self.typenum == cnp.NPY_CDOUBLE:
-            validate_index[npy_cdouble_wrapper](idx,
-                                                self.p.npy_cdouble_wrapper_ptr,
+        elif self.typenum == NPY_CDOUBLE:
+            validate_index[npy_cdouble_wrapper, npy_intp](idx,
+                                                self.view.p.npy_cdouble_wrapper_ptr,
                                                 self._is_shape_fixed)
             ival = PyComplex_Check(value)
             if ival == -1:
                 raise ValueError("Cannot interpret %s as a complex number" % value)
             z.real = PyComplex_RealAsDouble(value)
             z.imag = PyComplex_ImagAsDouble(value)
-            self.p.npy_cdouble_wrapper_ptr.set_one(idx, z)
+            self.view.p.npy_cdouble_wrapper_ptr.set_one(idx, z)
         else:
             raise TypeError("__setitem__: dtype = %s not understood." % self.dtype)
 
@@ -639,8 +631,8 @@ cdef class MapArray:
             try:
                 dt = np.asarray(self).dtype     # XXX there must be a more direct way
                 arr_self = MapArray(shape=other.shape,
-                                     dtype=dt,
-                                     fill_value=self)
+                                    dtype=dt,
+                                    fill_value=self)
                 return _i{{op}}_impl(arr_self, other)
             except TypeError:
                 # conversion to MapArray failed. Give up.
@@ -700,12 +692,11 @@ cdef class MapArray:
         raise NotImplementedError("In-place matmul is not implemented. "
                                   "Use a = a @ b instead of a @= b.")
 
-##### implementations
+######## implementations
 
 def _mmul_impl(MapArray self not None,
                MapArray A not None,
                MapArray B not None):
-
     # handle types
     if A.dtype != self.dtype:
         AA = A.astype(self.dtype)
@@ -715,11 +706,11 @@ def _mmul_impl(MapArray self not None,
         return _mmul_impl(self, A, BB)
 
     # by now all arrays are of the same dtype
-    {{for NUM, CT in zip(TNUMS, CTYPES)}}
-    if self.typenum == {{NUM}}:
-        op_{{CT}}.apply_mmul(self.p.{{CT}}_ptr,
-                             A.p.{{CT}}_ptr,
-                             B.p.{{CT}}_ptr)
+    {{for num, ct in zip(TNUMS, CTYPES)}}
+    if self.typenum == {{num}}:
+        apply_mmul[{{ct}}, npy_intp](self.view.p.{{ct}}_ptr,
+                                     A.view.p.{{ct}}_ptr,
+                                     B.view.p.{{ct}}_ptr)
         return self
     {{endfor}}
     raise NotImplementedError
@@ -749,39 +740,40 @@ def _richcmp_impl(MapArray self not None, MapArray other not None, int op):
     # by now, both self and other are of the same dtype
     result = MapArray(dtype=bool, ndim=self.ndim)
 
+    # TODO: shove the switch on `op` into an enum, like PyObject_RichCompare does
     # dispatch on the types
-    {{for NUM, CT in zip(TNUMS, CTYPES)}}
-    if self.typenum == {{NUM}}:
+    {{for num, ct in zip(TNUMS, CTYPES)}}
+    if self.typenum == {{num}}:
         if op == 0:
-            op_npy_bool.apply_binop[{{CT}}](less[{{CT}}],
-                                          result.p.npy_bool_ptr,
-                                          self.p.{{CT}}_ptr,
-                                          other.p.{{CT}}_ptr)
+            apply_binop[{{ct}}, npy_bool, npy_intp](less[{{ct}}],
+                                          result.view.p.npy_bool_ptr,
+                                          self.view.p.{{ct}}_ptr,
+                                          other.view.p.{{ct}}_ptr)
         elif op == 1:
-            op_npy_bool.apply_binop[{{CT}}](less_equal[{{CT}}],
-                                          result.p.npy_bool_ptr,
-                                          self.p.{{CT}}_ptr,
-                                          other.p.{{CT}}_ptr)
+            apply_binop[{{ct}}, npy_bool, npy_intp](less_equal[{{ct}}],
+                                          result.view.p.npy_bool_ptr,
+                                          self.view.p.{{ct}}_ptr,
+                                          other.view.p.{{ct}}_ptr)
         elif op == 2:
-            op_npy_bool.apply_binop[{{CT}}](equal[{{CT}}],
-                                          result.p.npy_bool_ptr,
-                                          self.p.{{CT}}_ptr,
-                                          other.p.{{CT}}_ptr)
+            apply_binop[{{ct}}, npy_bool, npy_intp](equal[{{ct}}],
+                                          result.view.p.npy_bool_ptr,
+                                          self.view.p.{{ct}}_ptr,
+                                          other.view.p.{{ct}}_ptr)
         elif op == 3:
-            op_npy_bool.apply_binop[{{CT}}](not_equal[{{CT}}],
-                                          result.p.npy_bool_ptr,
-                                          self.p.{{CT}}_ptr,
-                                          other.p.{{CT}}_ptr)
+            apply_binop[{{ct}}, npy_bool, npy_intp](not_equal[{{ct}}],
+                                          result.view.p.npy_bool_ptr,
+                                          self.view.p.{{ct}}_ptr,
+                                          other.view.p.{{ct}}_ptr)
         elif op == 4:
-            op_npy_bool.apply_binop[{{CT}}](greater[{{CT}}],
-                                          result.p.npy_bool_ptr,
-                                          self.p.{{CT}}_ptr,
-                                          other.p.{{CT}}_ptr)
+            apply_binop[{{ct}}, npy_bool, npy_intp](greater[{{ct}}],
+                                          result.view.p.npy_bool_ptr,
+                                          self.view.p.{{ct}}_ptr,
+                                          other.view.p.{{ct}}_ptr)
         elif op == 5:
-            op_npy_bool.apply_binop[{{CT}}](greater_equal[{{CT}}],
-                                          result.p.npy_bool_ptr,
-                                          self.p.{{CT}}_ptr,
-                                          other.p.{{CT}}_ptr)
+            apply_binop[{{ct}}, npy_bool, npy_intp](greater_equal[{{ct}}],
+                                          result.view.p.npy_bool_ptr,
+                                          self.view.p.{{ct}}_ptr,
+                                          other.view.p.{{ct}}_ptr)
         else:
             raise ValueError("sparse cmp: op = ." % op)
         return result
@@ -812,9 +804,9 @@ def _i{{op}}_impl(MapArray self not None, MapArray other not None):
     # dispatch
     {{for num, ct in zip(TNUMS, CTYPES)}}
     if self.typenum == {{num}}:
-        op_{{ct}}.inplace_binop({{op}}[{{ct}}],
-                                self.p.{{ct}}_ptr,
-                                other.p.{{ct}}_ptr)
+        inplace_binop[{{ct}}, npy_intp]({{op}}[{{ct}}],
+                                        self.view.p.{{ct}}_ptr,
+                                        other.view.p.{{ct}}_ptr)
         return self
     {{endfor}}
     raise NotImplementedError("_i{{op}}_: typecode %s not understood." % self.typenum)

@@ -8,7 +8,7 @@
 namespace sparray {
 
 
-template<typename T, typename I=single_index_type>
+template<typename T, typename I>
 struct map_array_t
 {
     typedef std::map<fixed_capacity<I>,
@@ -16,6 +16,8 @@ struct map_array_t
                       fixed_capacity_cmp<I> > map_type;
     typedef typename map_type::value_type value_type;    // pair<key, value>
     typedef typename map_type::key_type index_type;
+    typedef I single_index_type;
+    typedef T data_type;
     typedef typename map_type::const_iterator const_iterator;
     typedef typename map_type::iterator iterator;
 
@@ -33,7 +35,8 @@ struct map_array_t
                                             data_(fixed_capacity_cmp<I>(other.ndim())){
         copy_from(&other);
     };
-    template<typename S> void copy_from(const map_array_t<S, I> *src);
+    // XXX: `typename J` is not really handled
+    template<typename S, typename J> void copy_from(const map_array_t<S, J> *src);
 
     size_t ndim() const { return m_ndim; }
     index_type shape() const { return shape_; }
@@ -44,8 +47,8 @@ struct map_array_t
 
     size_t count_nonzero() const { return data_.size(); }
 
-    const_iterator begin() const { return data_.begin(); }
-    const_iterator end() const { return data_.end(); }
+    const_iterator cbegin() const { return data_.begin(); }
+    const_iterator cend() const { return data_.end(); }
 
     iterator begin() { return data_.begin(); }
     iterator end() { return data_.end(); }
@@ -53,8 +56,9 @@ struct map_array_t
     const_iterator find(const index_type& idx) const { return data_.find(idx);}
     iterator find(const index_type& idx) { return data_.find(idx);}
 
-    std::pair<iterator, bool> insert(const value_type& val){ return data_.insert(val); }
-    iterator insert(iterator hint, const value_type& val) { return data_.insert(hint, val); }
+    // this is *unsafe* because it does NOT update the shape.
+    // NB: set_one does.
+    std::pair<iterator, bool> _insert(const value_type& val){ return data_.insert(val); }
 
     // retrieve / set a single element
     T get_one(const index_type& idx) const;
@@ -123,9 +127,9 @@ struct operations
 
 
 template<typename T, typename I>
-template<typename S>
+template<typename S, typename J>
 inline void
-map_array_t<T, I>::copy_from(const map_array_t<S, I> *src)
+map_array_t<T, I>::copy_from(const map_array_t<S, J> *src)
 {
     if(!src)
         throw std::invalid_argument("copy from NULL");
@@ -133,13 +137,10 @@ map_array_t<T, I>::copy_from(const map_array_t<S, I> *src)
     if(this->ndim() != src->ndim())
         throw std::runtime_error("Dimensions mismatch.");
 
-    typename map_array_t<S, I>::const_iterator it = src->begin();
-    typename map_array_t<T, I>::iterator hint = this->begin();
-
-    for(; it != src->end(); ++it){
+    typename map_array_t<S, J>::const_iterator it = src->cbegin();
+    for(; it != src->cend(); ++it){
         T value = static_cast<T>(it->second);
-        hint = this->insert(hint, std::make_pair(it->first, value));
-        hint->second = value;
+        this->_insert(std::make_pair(it->first, value));
     }
 
     for(size_t j=0; j < ndim(); ++j){
@@ -155,7 +156,7 @@ inline T
 map_array_t<T, I>::get_one(const map_array_t::index_type& idx) const
 {
     const_iterator it = this->find(idx);
-    return (it != this->end()) ? it->second : fill_value_;
+    return (it != this->cend()) ? it->second : fill_value_;
 }
 
 
@@ -164,7 +165,7 @@ inline void
 map_array_t<T, I>::set_one(const map_array_t::index_type& idx, const T& value)
 {
     // XXX Can use a hint if inserting consequtive values.
-    std::pair<iterator, bool> p = this->insert(std::make_pair(idx, value));
+    std::pair<iterator, bool> p = this->_insert(std::make_pair(idx, value));
     p.first->second = value;
 
     // update the shape if needed
@@ -193,36 +194,46 @@ map_array_t<T, I>::set_shape(const index_type& shp)
 }
 
 
+template<typename T, typename I>
+inline I
+_flat_index_helper(const typename map_array_t<T, I>::index_type& index,
+                   const typename map_array_t<T, I>::index_type& shape,
+                   size_t num_dim)
+{
+    typename map_array_t<T, I>::index_type strides(num_dim);
+    if (num_dim == 1) {
+        return index[0];
+    }
+    else if (num_dim == 2) {
+        I stride = shape[1];
+        return index[0]*stride + index[1];
+    }
+    else if (num_dim == 3) {
+        return index[0]*shape[1]*shape[2] + index[1]*shape[2] + index[2]; 
+    }
+    else {
+        strides[num_dim - 1] = 1;
+        int j = num_dim - 1;
+        while(j--){ 
+            strides[j] = strides[j+1] * shape[j+1]; 
+        }
+
+        I fff = 0;
+        for(size_t j=0; j < num_dim; ++j){
+            fff += strides[j]*index[j]; 
+        }
+        return fff;
+    }
+}
+
+
 /* Flat index to an array. C order, 2D only.
  */
 template<typename T, typename I>
 inline I
 map_array_t<T, I>::_flat_index(const typename map_array_t<T, I>::index_type& index) const
 {
-    if (ndim() == 1){
-        return index[0];
-    }
-    else if (ndim() == 2){
-        I stride = shape_[1];
-        return index[0]*stride + index[1];
-    }
-    else if (ndim() == 3){
-        return index[0]*shape_[1]*shape_[2] + index[1]*shape_[2] + index[2]; 
-    }
-    else{
-        index_type strides(ndim());
-        strides[ndim() - 1] = 1;
-        int j = ndim() - 1;
-        while(j--){ 
-            strides[j] = strides[j+1] * shape_[j+1]; 
-        }
-
-        I fff = 0;
-        for(size_t j=0; j < ndim(); ++j){
-            fff += strides[j]*index[j]; 
-        }
-        return fff;
-    }
+    return _flat_index_helper<T, I>(index, shape(), ndim());
 }
 
 
@@ -244,8 +255,8 @@ operations<T, I>::todense(const map_array_t<T, I>* src,
     std::fill(_dest, _dest + num_elem, src->fill_value());
 
     // fill nonzero elements
-    typename map_array_t<T, I>::const_iterator it = src->begin();
-    for(; it != src->end(); ++it){
+    typename map_array_t<T, I>::const_iterator it = src->cbegin();
+    for(; it != src->cend(); ++it){
         I idx = src->_flat_index(it->first);
         assert(idx < num_elem);
         _dest[idx] = it->second;
@@ -274,9 +285,9 @@ operations<T, I>::to_coo(const map_array_t<T, I>* src,
     if (num_elem == 0){ return; }
 
     typename map_array_t<T, I>::index_type idx;
-    typename map_array_t<T, I>::const_iterator it = src->begin();
+    typename map_array_t<T, I>::const_iterator it = src->cbegin();
     I j = 0;
-    for(; it != src->end(); ++it){
+    for(; it != src->cend(); ++it){
         assert(j < num_elem);
         idx = it->first;
         _data[j] = it->second;
@@ -334,7 +345,7 @@ operations<T, I>::inplace_binop(T (*binop)(T x, T y),
     for(; it != self->end(); ++it){
         idx = it->first;
         it_other = other->find(idx);
-        T y = (it_other != other->end()) ? it_other->second 
+        T y = (it_other != other->cend()) ? it_other->second 
                                          : other->fill_value();
         it->second = alpha * (*binop)(it->second, y) + beta * it->second;
     }
@@ -344,12 +355,12 @@ operations<T, I>::inplace_binop(T (*binop)(T x, T y),
         // *this and *other have been taken care of already. Insert new ones
         // into *this. This loop's complexity is O(n2 * log(n1))
         typename map_array_t<T, I>::index_type idx;
-        typename map_array_t<T, I>::const_iterator it_other = other->begin();
-        for(; it_other != other->end(); ++it_other){
+        typename map_array_t<T, I>::const_iterator it_other = other->cbegin();
+        for(; it_other != other->cend(); ++it_other){
             idx = it_other->first;
             T value = alpha * (*binop)(self->fill_value(), it_other->second) +
                       beta * self->fill_value();
-            self->insert(std::make_pair(idx, value));
+            self->_insert(std::make_pair(idx, value));
         }
     }
 
@@ -390,15 +401,15 @@ operations<T, I>::apply_binop(T (*binop)(S x, S y),
     std::pair<typename map_array_t<T, I>::iterator, bool> p;
     typename map_array_t<T, I>::index_type idx;
     typename map_array_t<S, I>::const_iterator it, it2;
-    for(it = arg1->begin(); it != arg1->end(); ++it){
+    for(it = arg1->cbegin(); it != arg1->cend(); ++it){
         idx = it->first;
         it2 = arg2->find(idx);
-        S y = (it2 != arg2->end()) ? it2->second
-                                   : arg2->fill_value();
+        S y = (it2 != arg2->cend()) ? it2->second
+                                    : arg2->fill_value();
 
         T value = (*binop)(it->second, y);
 
-        p = self->insert(std::make_pair(idx, value));
+        p = self->_insert(std::make_pair(idx, value));
         if(!(p.second)){ p.first->second = value; }   // overwrite what was there at index idx
     }
 
@@ -409,14 +420,14 @@ operations<T, I>::apply_binop(T (*binop)(S x, S y),
         std::pair<typename map_array_t<T, I>::iterator, bool> p;
         typename map_array_t<T, I>::index_type idx;
         typename map_array_t<S, I>::const_iterator it1, it2;
-        for(it2 = arg2->begin(); it2 != arg2->end(); ++it2){
+        for(it2 = arg2->cbegin(); it2 != arg2->cend(); ++it2){
                 idx = it2->first;
                 it1 = arg1->find(idx);
-                if (it1 == arg1->end()){
+                if (it1 == arg1->cend()){
                     // it1->second is present in arg2 but not in arg1
                     T value = (*binop)(arg1->fill_value(), it2->second);
 
-                    p = self->insert(std::make_pair(idx, value));
+                    p = self->_insert(std::make_pair(idx, value));
                     if(!(p.second)){ p.first->second = value; }
 
                 }
@@ -470,11 +481,11 @@ operations<T, I>::apply_mmul(map_array_t<T, I> *C,
     typename map_array_t<T, I>::index_type idxA, idxB;
 
     T Aij, Bjk, Cik, value;
-    for (itA = A->begin(); itA != A->end(); ++itA){
+    for (itA = A->cbegin(); itA != A->cend(); ++itA){
         Aij = itA->second;
         idxA = itA->first;
         shp[0] = idxA[0];
-        for(itB = B->begin(); itB != B->end(); ++itB){
+        for(itB = B->cbegin(); itB != B->cend(); ++itB){
             idxB = itB->first;
             if( idxA[1] != idxB[0])
                 continue;                       // XXX row/column_iterators?
@@ -487,7 +498,7 @@ operations<T, I>::apply_mmul(map_array_t<T, I> *C,
                                     : C->fill_value();
             value = Aij*Bjk + Cik;
 
-            p = C->insert(std::make_pair(idx, value));
+            p = C->_insert(std::make_pair(idx, value));
             if(!(p.second)){ p.first->second = value; }
         }
     }
@@ -506,8 +517,8 @@ get_min_shape(const map_array_t<T, I>& arg)
     typename map_array_t<T, I>::index_type sh(arg.ndim());
     for (size_t j = 0; j < arg.ndim(); ++j){ sh[j] = 0; }
 
-    typename map_array_t<T, I>::const_iterator it = arg.begin();
-    for (; it != arg.end(); ++it){
+    typename map_array_t<T, I>::const_iterator it = arg.cbegin();
+    for (; it != arg.cend(); ++it){
         for (size_t j=0; j < arg.ndim(); ++j){ 
             if (it->first[j] >= sh[j]){
                 sh[j] = it->first[j] + 1;
@@ -530,8 +541,8 @@ std::ostream&
 operator<<(std::ostream& out, const sparray::map_array_t<T, I>& ma)
 {
     out << "\n*** shape = " << ma.shape() << "  num_elem = "<< ma.count_nonzero() <<" {\n";
-    typename sparray::map_array_t<T, I>::const_iterator it = ma.begin();
-    for (; it != ma.end(); ++it){
+    typename sparray::map_array_t<T, I>::const_iterator it = ma.cbegin();
+    for (; it != ma.cend(); ++it){
         std::cout << "    " << it->first << " -> " << it->second <<"\n";
     }
     return out << "}  w/ fill_value = " << ma.fill_value() << "\n";

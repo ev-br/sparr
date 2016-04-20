@@ -29,7 +29,8 @@ def process_tempita_pyx():
 process_tempita_pyx()
 
 ext = Extension("sparr._sp_map", [os.path.join("sparr", "sp_map.pyx")],
-                include_dirs = [numpy.get_include()],
+                include_dirs = [numpy.get_include(),
+                                "/home/br/boost_1_60_0"],   # XXX
                 extra_compile_args = extra_compile_args,
                 language="c++",)
                 
