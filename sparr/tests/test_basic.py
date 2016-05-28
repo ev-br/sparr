@@ -179,7 +179,7 @@ class BasicMixin(object):
         data, (row, col) = m.to_coo()
 
         m1 = MapArray.from_coo(data, (row, col))
-        assert_equal(m, m1)
+        assert_equal(m.todense(), m1.todense())
 
 
 class TestBasicDouble(BasicMixin, TestCase):
