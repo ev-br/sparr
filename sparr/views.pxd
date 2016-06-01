@@ -51,11 +51,11 @@ cdef extern from "views.h" namespace "sparray":
 cdef extern from "operations.h" namespace "sparray":
     void todense[T, I](abstract_view_t[T, I] *src,
                        void *dest,
-                       const I num_elem)
+                       const I num_elem) except +
 
     void to_coo[T, I](abstract_view_t[T, I] *src,
                       void* data, void* stacked_indices,
-                      const I num_elem)
+                      const I num_elem) except +
 
     void inplace_unary[T, I](abstract_view_t[T, I] *src,
                              T (*op)(T x),
