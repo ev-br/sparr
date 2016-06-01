@@ -956,7 +956,6 @@ def test_bad_indexing():
                    (1,),
                    (),        # what is it, a view
                    (slice(None,), 1),    # assorted slices
-                   Ellipsis,
                    (Ellipsis,),
                    (1, Ellipsis),
                    [1, 2],            # fancy indexing

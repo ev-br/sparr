@@ -33,6 +33,7 @@ cdef extern from "views.h" namespace "sparray":
         T get_one(const index_type& idx) const 
         void set_one(const index_type& idx, const T& value)
 
+        vector[slice_t] get_slices() const
 
     cdef cppclass map_view_t[T, I](abstract_view_t[T, I]):
         map_view_t(map_array_t[T, I] *base)

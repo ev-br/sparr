@@ -12,13 +12,16 @@ from numpy cimport (NPY_BYTE, NPY_SHORT, NPY_INT, NPY_LONG, NPY_LONGLONG,
                     NPY_FLOAT, NPY_DOUBLE, NPY_CDOUBLE, NPY_INTP, NPY_BOOL)
 from numpy cimport PyArray_SimpleNew, PyArray_DATA, PyArray_SIZE
 
+from cpython cimport PyObject
 from cpython.object cimport PyObject_IsTrue, PyObject_RichCompare
 from cpython.complex cimport (PyComplex_Check, PyComplex_FromDoubles,
                               PyComplex_RealAsDouble, PyComplex_ImagAsDouble)
+from libcpp.vector cimport vector
 
 from sparr.fixed_cap cimport index_type, index_factory_t, FC_ELEMS
-from sparr.views cimport (map_array_t, abstract_view_t, map_view_t,
+from sparr.views cimport (map_array_t, abstract_view_t, map_view_t, view_view_t,
                           todense, to_coo, inplace_binop, apply_binop, apply_mmul)
+from sparr.slices cimport slice_t, slices_from_pyslices, slices_from_pyslices2
 
 cdef extern from "complex_ops.h":
     cdef cppclass npy_cdouble_wrapper:
@@ -113,7 +116,24 @@ cdef class View:
     cdef view_union_t p
     cdef int typenum
 
-    def __cinit__(self, int typenum, Holder holder):
+    @staticmethod
+    def from_data(int typenum, Holder holder not None):
+        """Construct a view onto the data held by `holder`.
+
+        Parameters
+        ----------
+        typenum : int
+            numpy-style type number
+        holder : Holder
+            a Holder object, wrapping a map_array_t data
+
+        Returns
+        -------
+        A View wrapper over a map_view_t object, viewing onto the data held
+        by `holder`. This is an identical view, which view the full data.
+
+        """
+        self = View()
         self.typenum = typenum
 
         assert typenum == holder.typenum
@@ -126,11 +146,53 @@ cdef class View:
         else:
             dtype = np.dtype(cnp.PyArray_TypeObjectFromType(self.typenum))
             raise TypeError("dtype %s  not supported." % dtype)
+        return self
+
+    @staticmethod
+    def from_view(int typenum, View view not None, object pyslices):
+        """Construct a composite view, wrapping a view_view_t object.
+
+        Parameters
+        ----------
+        typenum : int
+            numpy-style type number
+        view : View
+            a base view
+        pyslices : tuple
+            a tuple of slices
+
+        Returns
+        -------
+        A View wrapper over a view_view_t object, viewing onto the same
+        data as the `view`.
+        This mimicks an indexing operation similar to a[::2][::2]
+
+        """
+        self = View()
+        self.typenum = typenum
+        assert typenum == view.typenum
+
+        cdef vector[slice_t] sl, sl0
+        {{for num, ct, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} {{num}} == typenum:
+            sl0 = view.p.{{ct}}_ptr.get_slices()
+
+            if sl0.empty():
+                sl = slices_from_pyslices(<PyObject *>pyslices,
+                                          view.p.{{ct}}_ptr.shape())
+            else:
+                sl = slices_from_pyslices2(sl0, <PyObject *>pyslices)
+            self.p.{{ct}}_ptr = new view_view_t[{{ct}}, npy_intp](view.p.{{ct}}_ptr, sl)
+        {{endfor}}
+        else:
+            dtype = np.dtype(cnp.PyArray_TypeObjectFromType(self.typenum))
+            raise TypeError("dtype %s  not supported." % dtype)
+        return self
 
     def __dealloc__(self):
-        {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
-        {{IF}} self.typenum == {{NUM}}:
-            del self.p.{{CT}}_ptr
+        {{for num, ct, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} self.typenum == {{num}}:
+            del self.p.{{ct}}_ptr
         {{endfor}}
         # NB: this if-then-else is deliberately not closed off with an error.
         # The reason is that if a dtype lookup fails in __cinit__, it raises
@@ -253,7 +315,7 @@ cdef class MapArray:
 
         # allocate memory on the correct type pointer
         self.holder = Holder(self.typenum, nd)
-        self.view = View(self.typenum, self.holder)
+        self.view = View.from_data(self.typenum, self.holder)
         self.base = None
 
         {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
@@ -496,13 +558,17 @@ cdef class MapArray:
             self[r, c] = val
         return self
 
-
-###    def _make_view(self):
-###        m = MapArray(self.shape, self.ndim, self.fill_value, self.dtype)
-###        m.holder = self.holder
-###        m.base = self
-###        #m.own_data = False
-###        return m
+    def _make_view(self, slices=None):
+        m = MapArray(self.shape, self.ndim, self.fill_value, self.dtype)
+        m.holder = self.holder
+        if slices is None:
+            m.view = View.from_data(self.typenum, self.holder)
+        else:
+            m.view = View.from_view(self.typenum, self.view, slices)
+        m.base = self
+        # XXX: view_view_t
+        #m.own_data = False
+        return m
 
     ##### Single element access #####
 
@@ -512,10 +578,11 @@ cdef class MapArray:
             tpl = (tpl,)
         cdef index_type idx = self.index_factory.get_new()
         if not _is_tuple_of_integers(tpl, idx, self.index_factory.ndim()):
+            if tpl is Ellipsis:
+                slices = tuple(slice(None,) for _ in range(self.ndim))
+                return self._make_view(slices)
             raise IndexError("%s cannot be interpreted as an index into "
                              " an array." % str(tpl))
-###            # XXX: this is effectively self[...]
-###            return self._make_view()
 
         {{for NUM, CT in zip(TNUMS_GEN, CTYPES_GEN)}}
         if self.typenum == {{NUM}}:
@@ -541,6 +608,7 @@ cdef class MapArray:
         if not _is_tuple_of_integers(tpl, idx, self.index_factory.ndim()):
             raise IndexError("%s cannot be interpreted as an index into "
                              " an array." % str(tpl))
+
         cdef int ival
         cdef npy_cdouble_wrapper z
 

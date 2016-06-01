@@ -28,16 +28,23 @@ def process_tempita_pyx():
 
 process_tempita_pyx()
 
-ext = Extension("sparr._sp_map", [os.path.join("sparr", "sp_map.pyx")],
+ext = Extension("sparr._sp_map", [os.path.join("sparr", "sp_map.pyx"),
+                                  os.path.join("sparr", "slices.cc")],
                 include_dirs = [numpy.get_include(),
                                 "/home/br/boost_1_60_0"],   # XXX
                 extra_compile_args = extra_compile_args,
                 language="c++",)
+
+# python exposure of slice handling internals, for tests only
+ext_sl = Extension("sparr._slices", [os.path.join("sparr", "_combine_slices.pyx"),
+                                     os.path.join("sparr", "slices.cc")],
+                language="c++",)
+
                 
 setup(name="sparr",
       packages=["sparr", "sparr.tests"],
       version="0.0.1",
       license="BSD",
 
-      ext_modules=[ext],
+      ext_modules=[ext_sl, ext],
       cmdclass = {'build_ext': build_ext})

@@ -6,6 +6,7 @@
 #include <boost/iterator/iterator_adaptor.hpp>
 
 #include "common_types.h"
+#include "sp_map.h"
 
 /*
  * Notation: given a = [1, 2, 3, 4], the indices to `a` are prefixed with m,
@@ -85,7 +86,7 @@ converter_t<Key>::m_from_v(const Key& vIdx) const
     if (is_identical())
         return vIdx;
 
-    assert(vIdx.ndim() == m_slices.size());
+    assert(vIdx.ndim() == (int)m_slices.size());
 
     Key mIdx(m_slices.size());
     for (size_t j=0; j < m_slices.size(); ++j) {
@@ -226,6 +227,8 @@ struct abstract_view_t
 
     virtual single_index_type _flat_index(const index_type& vIdx) const = 0;
 
+    std::vector<slice_t> get_slices() const { return m_conv.m_slices; }
+
     protected:
         Array *m_base;
         converter_t<index_type> m_conv;
@@ -344,6 +347,7 @@ struct view_view_t : public abstract_view_t<T, I>
 {
     typedef map_array_t<T, I> Array;
     typedef typename Array::data_type data_type;
+    typedef typename Array::value_type value_type;    // pair<key, value>
     typedef typename Array::single_index_type single_index_type;
     typedef typename Array::index_type index_type;
     typedef slice_iterator<typename Array::iterator,
@@ -359,7 +363,7 @@ struct view_view_t : public abstract_view_t<T, I>
     {
         if (!base_view)
             throw std::runtime_error("view: base cannot be NULL");
-        assert(base_view->ndim() == slices.size());
+        assert(base_view->ndim() == (int)slices.size());
     }
 
     int ndim() const {
@@ -421,29 +425,29 @@ struct view_view_t : public abstract_view_t<T, I>
                         this->m_conv);
     }
 
-//    const_iterator find(const index_type& vIdx) const {
-//        assert(this->m_base);
-//        index_type mIdx = m_conv.m_from_v(vIdx);
-//        return const_iterator(this->m_base->find(mIdx), this->m_base->end(), m_conv);
-//    }
-//    iterator find(const index_type& vIdx) {
-//        assert(this->m_base);
-//        index_type mIdx = m_conv.m_from_v(vIdx);
-//        return iterator(this->m_base->find(mIdx), this->m_base->end(), m_conv);
-//    }
+    const_iterator find(const index_type& vIdx) const {
+        assert(this->m_base);
+        index_type mIdx = this->m_conv.m_from_v(vIdx);
+        return const_iterator(this->m_base->find(mIdx), this->m_base->end(), this->m_conv);
+    }
+    iterator find(const index_type& vIdx) {
+        assert(this->m_base);
+        index_type mIdx = this->m_conv.m_from_v(vIdx);
+        return iterator(this->m_base->find(mIdx), this->m_base->end(), this->m_conv);
+    }
 
-//    // this is *unsafe*, as this does NOT update the shape.
-//    // NB: set_one does.
-//    std::pair<iterator, bool> _insert(const value_type& val) {
-//        assert(this->m_base);
-//        index_type mIdx = m_conv.m_from_v(val.first);
+    // this is *unsafe*, as this does NOT update the shape.
+    // NB: set_one does.
+    std::pair<iterator, bool> _insert(const value_type& val) {
+        assert(this->m_base);
+        index_type mIdx = this->m_conv.m_from_v(val.first);
 
-//        // repackage the base iterator into the view iterator
-//        std::pair<base_iterator_type, bool> res;
-//        res = this->m_base->insert(std::make_pair(mIdx, val.second));
-//        iterator it = iterator(res.first, this->m_base->end(), m_conv);
-//        return std::make_pair(it, res.second);
-//    }
+        // repackage the base iterator into the view iterator
+        std::pair<typename Array::iterator, bool> res;
+        res = this->m_base->_insert(std::make_pair(mIdx, val.second));
+        iterator it = iterator(res.first, this->m_base->end(), this->m_conv);
+        return std::make_pair(it, res.second);
+    }
 
     data_type get_one(const index_type& vIdx) const {
         assert(this->m_base);
@@ -454,6 +458,11 @@ struct view_view_t : public abstract_view_t<T, I>
         assert(this->m_base);
         index_type mIdx = this->m_conv.m_from_v(vIdx);
         this->m_base->set_one(mIdx, value);
+    }
+
+    void set_one(const iterator& it, const data_type& value) {
+        assert(this->m_base);
+        it.base()->second = value;
     }
 
     virtual single_index_type _flat_index(const index_type& vIdx) const {
