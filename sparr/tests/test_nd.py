@@ -20,6 +20,16 @@ def test_3d_ctor():
     assert_equal(m.shape, (2, 2, 3))
 
 
+def test_1d_ctor():
+    m = MapArray(ndim=1)
+    assert_equal(m.ndim, 1)
+    assert_equal(m.shape, (0,))
+
+    m[1] = 3
+    assert_equal(m.shape, (2,))
+    assert_equal(m[1], 3)
+
+
 def test_todense():
     m = MapArray(shape=(2, 3, 4))
     assert_equal(m.ndim, 3)
@@ -114,6 +124,7 @@ def test_to_coo():
     assert_equal(i1, [0, 2, 3])
     assert_equal(i2, [0, 3, 4])
     assert_equal(i3, [0, 4, 5])
+
 
 if __name__ == "__main__":
     run_module_suite()

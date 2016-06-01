@@ -106,7 +106,9 @@ cdef class Holder:
 
 
 cdef class View:
-    """Only holds the map_array_t member. No python exposure.
+    """Only holds a view onto the map_array_t object (which is managed
+       separately, via a Holder class.)
+       No python exposure.
     """
     cdef view_union_t p
     cdef int typenum
@@ -506,6 +508,8 @@ cdef class MapArray:
 
     def __getitem__(self, tpl):
         # no slicing, single-element access only
+        if self.ndim == 1:
+            tpl = (tpl,)
         cdef index_type idx = self.index_factory.get_new()
         if not _is_tuple_of_integers(tpl, idx, self.index_factory.ndim()):
             raise IndexError("%s cannot be interpreted as an index into "
@@ -531,6 +535,8 @@ cdef class MapArray:
         raise TypeError("__getitem__: dtype = %s not understood." % self.dtype)
 
     def __setitem__(self, tpl, value):
+        if self.ndim == 1:
+            tpl = (tpl,)
         cdef index_type idx = self.index_factory.get_new()
         if not _is_tuple_of_integers(tpl, idx, self.index_factory.ndim()):
             raise IndexError("%s cannot be interpreted as an index into "
