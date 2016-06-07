@@ -574,32 +574,35 @@ cdef class MapArray:
 
     def __getitem__(self, tpl):
         # no slicing, single-element access only
-        if self.ndim == 1:
+        if not isinstance(tpl, tuple):
             tpl = (tpl,)
-        cdef index_type idx = self.index_factory.get_new()
-        if not _is_tuple_of_integers(tpl, idx, self.index_factory.ndim()):
-            if tpl is Ellipsis:
-                slices = tuple(slice(None,) for _ in range(self.ndim))
-                return self._make_view(slices)
-            raise IndexError("%s cannot be interpreted as an index into "
-                             " an array." % str(tpl))
-
-        {{for NUM, CT in zip(TNUMS_GEN, CTYPES_GEN)}}
-        if self.typenum == {{NUM}}:
-            validate_index[{{CT}}, npy_intp](idx, self.view.p.{{CT}}_ptr, True)
-            return self.view.p.{{CT}}_ptr.get_one(idx)
-
-        {{endfor}}
-        if self.typenum == NPY_BOOL:
-            validate_index[npy_bool, npy_intp](idx, self.view.p.npy_bool_ptr, True)
-            return self.view.p.npy_bool_ptr.get_one(idx) != 0
 
         cdef npy_cdouble_wrapper z
-        if self.typenum == NPY_CDOUBLE:
-            validate_index[npy_cdouble_wrapper, npy_intp](idx, self.view.p.npy_cdouble_wrapper_ptr, True)
-            z = self.view.p.npy_cdouble_wrapper_ptr.get_one(idx)
-            return PyComplex_FromDoubles(z.real, z.imag)
-        raise TypeError("__getitem__: dtype = %s not understood." % self.dtype)
+        cdef index_type idx = self.index_factory.get_new()
+        if _is_tuple_of_integers(tpl, idx, self.index_factory.ndim()):
+            {{for NUM, CT in zip(TNUMS_GEN, CTYPES_GEN)}}
+            if self.typenum == {{NUM}}:
+                validate_index[{{CT}}, npy_intp](idx, self.view.p.{{CT}}_ptr, True)
+                return self.view.p.{{CT}}_ptr.get_one(idx)
+
+            {{endfor}}
+            if self.typenum == NPY_BOOL:
+                validate_index[npy_bool, npy_intp](idx, self.view.p.npy_bool_ptr, True)
+                return self.view.p.npy_bool_ptr.get_one(idx) != 0
+
+            if self.typenum == NPY_CDOUBLE:
+                validate_index[npy_cdouble_wrapper, npy_intp](idx, self.view.p.npy_cdouble_wrapper_ptr, True)
+                z = self.view.p.npy_cdouble_wrapper_ptr.get_one(idx)
+                return PyComplex_FromDoubles(z.real, z.imag)
+            raise TypeError("__getitem__: dtype = %s not understood." % self.dtype)
+
+#        elif tpl is Ellipsis:
+#            slices = tuple(slice(None,) for _ in range(self.ndim))
+        else:
+            slices = tuple_to_slices(tpl, self.shape)
+            return self._make_view(slices)
+        raise IndexError("%s cannot be interpreted as an index into "
+                         " an array." % str(tpl))
 
     def __setitem__(self, tpl, value):
         if self.ndim == 1:
@@ -898,6 +901,47 @@ def _try_converting_from_sparse(what):
     row = row.astype(np.intp)  # XXX how MapArray.from_coo wants it
     col = col.astype(np.intp)
     return MapArray.from_coo(data, (row, col))
+
+
+def tuple_to_slices(tpl, shape):
+    """Convert a tuple of slices/integers into a tuple of slices."""
+
+    # FIXME: unless there are Noness
+    if len(tpl) > len(shape):
+        raise IndexError("tpl too long.")
+
+    ell_pos = -1
+    res = []
+    for j, x in enumerate(tpl):
+        if isinstance(x, slice):
+            res.append(x)
+        elif isinstance(x, int):
+            # TODO: check if in bounds (numpy does)
+            if (x >= shape[j]) or (x < -shape[j]):
+                raise IndexError("Index %s is out of bounds for the axis %s "
+                                 "with size %s." % (x, j, shape[j]))
+            res.append(slice(x, x+1))
+        elif x is Ellipsis:
+            if ell_pos != -1:
+                raise IndexError("Only one Ellipsis is allowed.")
+            ell_pos = j
+        elif x is None:
+            raise IndexError("newaxis is not supported yet.")
+        else:
+            raise IndexError("Entry %s not understood." % x)
+
+    # Ellipsis
+    if ell_pos != -1:
+        num = len(shape) - len(res)
+        res = res[:ell_pos] + [slice(None) for _ in range(num)] + res[ell_pos:]
+
+    numt = len(shape) - len(res)
+    if numt > 0:
+        raise IndexError("no changing of dims yet.")
+        # fill the remaining trailing dims with slice(None)-s
+        res += [slice(None) for _ in range(numt)]
+
+    return tuple(res)
 
 
 cnp.import_array()
