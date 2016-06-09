@@ -31,7 +31,6 @@ def test_view_stub_writeable():
     # check that updates to the view propagate to the base
     m = MapArray()
     m[1, 1] = 2.
-    r0 = refc(m)
 
     mm = m[...]
     mm[0, 1] = 3.
@@ -41,6 +40,35 @@ def test_view_stub_writeable():
     del m
     assert_allclose(mm.todense(), np.array([[0, 3], [0, 2]]), atol=1e-15)
 
+
+def test_view_stub_write_to_base():
+    # check that updates to the base propagate to the view
+    m = MapArray()
+    m[1, 2] = 2.
+    mm = m[...]
+
+    m[0, 0] = 1.
+    assert_allclose(m.todense(), mm.todense(), atol=1e-15)
+
+
+@knf(True, "changing the shape of the base screws up the view")
+def test_view_stub_write_to_base_2():
+    # check that updates to the base propagate to the view
+    m = MapArray()
+    m[1, 2] = 2.
+    mm = m[...]
+
+    m[3, 4] = 1.
+    assert_allclose(m.todense(), mm.todense(), atol=1e-15)
+
+
+def test_copy():
+    # copy of the view has no base
+    m = MapArray()
+    m[1, 2] = 2.
+    mm = m[...]
+    mmm = mm.copy()
+    assert_(mmm.base is None)
 
 def test_getitem_slices():
     m = MapArray()
@@ -64,6 +92,13 @@ def check_slicing(m, s1, s2):
     assert_allclose(mm.todense(), m.todense()[s1, s2], atol=1e-15)
     assert_(mm.base is m)
     assert_(m.base is None)
+
+    mmm = mm[::2, :]
+
+    import pdb; pdb.set_trace()
+
+    assert_allclose(mmm.todense(), m.todense()[s1, s2][::2, :], atol=1e-15)
+    assert_(mmm.base is mm)
 
 
 def test_two_ellipsis():
