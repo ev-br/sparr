@@ -118,7 +118,10 @@ class slice_iterator
                                 const converter_t<Key>& conv)
             : slice_iterator::iterator_adaptor_(p),
               m_end(end_),
-              m_conv(conv) {}
+              m_conv(conv)
+        {
+               satisfy_predicate();
+        }
 
         typedef typename slice_iterator<Iterator, Key, Value>::reference reference;  // ????
 
@@ -144,7 +147,8 @@ class slice_iterator
 
         void satisfy_predicate() {
             while (this->base() != this->m_end &&
-                   !this->m_conv.v_from_m(this->base()->first).first) {
+                   !this->m_conv.v_from_m(this->base()->first).first)
+            {
                 ++(this->base_reference());
             }
         }
