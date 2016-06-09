@@ -262,7 +262,7 @@ cdef class MapArray:
     """
     cdef Holder holder
     cdef View view
-    cdef MapArray base
+    cdef MapArray _base
     cdef int typenum
     cdef int _is_shape_fixed
     cdef index_factory_t *index_factory
@@ -316,7 +316,7 @@ cdef class MapArray:
         # allocate memory on the correct type pointer
         self.holder = Holder(self.typenum, nd)
         self.view = View.from_data(self.typenum, self.holder)
-        self.base = None
+        self._base = None
 
         {{for NUM, CT, IF in zip(TNUMS, CTYPES, CONDS)}}
         {{IF}} self.typenum == {{NUM}}:
@@ -388,6 +388,10 @@ cdef class MapArray:
                 self.view.p.npy_cdouble_wrapper_ptr.set_fill_value(z)
             else:
                 raise TypeError("fill_value: dtype = %s unhandled." % self.dtype)
+
+    property base:
+        def __get__(self):
+            return self._base
 
     property shape:
         def __get__(self):
@@ -565,8 +569,7 @@ cdef class MapArray:
             m.view = View.from_data(self.typenum, self.holder)
         else:
             m.view = View.from_view(self.typenum, self.view, slices)
-        m.base = self
-        # XXX: view_view_t
+        m._base = self
         #m.own_data = False
         return m
 

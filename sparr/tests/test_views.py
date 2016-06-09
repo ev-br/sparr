@@ -62,6 +62,8 @@ def test_getitem_slices():
 def check_slicing(m, s1, s2):
     mm = m[s1, s2]
     assert_allclose(mm.todense(), m.todense()[s1, s2], atol=1e-15)
+    assert_(mm.base is m)
+    assert_(m.base is None)
 
 
 def test_two_ellipsis():
