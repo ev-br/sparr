@@ -26,6 +26,11 @@ T sub(T x, T y){
     return x - y;
 }
 
+template<typename T>
+T assign(T x, T y) {
+    return y;
+}
+
 //////// COMPARISONS /////////////
 
 template<typename S>

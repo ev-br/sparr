@@ -63,7 +63,7 @@ validate_index(index_type& idx, const abstract_view_t<T, I> *arr, int is_shape_f
         if ((idx[j] < 0) ||
             (is_shape_fixed && (idx[j] >= shp[j]))){
                 PyErr_Format(PyExc_IndexError, "index %ld is out of bounds for "
-                            "axis %zu with size %ld", idx[j], j, shp[j]);
+                            "axis %zu with size %ld", idx[j], (size_t)j, shp[j]);
                 return NULL;
         }
     }

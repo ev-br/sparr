@@ -111,6 +111,7 @@ inline void
 inplace_binop(T (*binop)(T x, T y),
               abstract_view_t<T, I> *self,
               const abstract_view_t<T, I> *other,
+              int can_mutate_fill_value,
               T alpha=1, T beta=0)
 {
     typedef abstract_view_t<T, I> Array;
@@ -125,6 +126,17 @@ inplace_binop(T (*binop)(T x, T y),
         if(self->shape()[j] != other->shape()[j]){
             throw std::invalid_argument("Binop: incompatible dimensions.");
         }
+    }
+
+    // fill_value
+    T new_fill_value = alpha * (*binop)(self->fill_value(), other->fill_value()) +
+                       beta * self->fill_value();
+
+    bool cond = can_mutate_fill_value || (new_fill_value == self->fill_value());
+    if (!cond) {
+        // updating the fill_value is prohibited by the caller;
+        // the operation tries to change it; bail out (XXX: densify instead?)
+        throw std::invalid_argument("Changing the fill_value is not allowed.");
     }
 
     // run over the nonzero elements of *this. This is O(n1 * log(n2))
@@ -153,10 +165,9 @@ inplace_binop(T (*binop)(T x, T y),
         }
     }
 
-    // update fill_value
-    T fill_value = alpha * (*binop)(self->fill_value(), other->fill_value()) +
-                   beta * self->fill_value();
-    self->set_fill_value(fill_value);
+    // finally, update the fill_value
+    self->set_fill_value(new_fill_value);
+
 }
 
 

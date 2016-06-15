@@ -206,3 +206,51 @@ class TestCmpViews(CmpViewsMixin):
     ldtype = float
     rdtype = int
 
+
+################ __setitem__
+class TestSetItem(TestCase):
+    def setUp(self):
+        a = np.arange(2*4, dtype=int).reshape(2, 4)
+        m = MapArray.from_dense(a)
+        m[3, 5] = 8        # so that there are empty elements
+        self.m = m
+
+    def test_iadd_slice(self):
+        # test array[slice, slice] += array
+        m = self.m.copy()
+        c = m[1::2, 1::2].copy()
+
+        m[1::2, 1::2] += c
+
+        # repeat w/ dense matrices
+        md = self.m.todense()
+        cd = md[1::2, 1::2].copy()
+        md[1::2, 1::2] += cd
+        assert_equal(m.todense(), md)
+
+    @knf(True, "adding a scalar changes the fill_value and that's not OK.")
+    def test_iadd_scalar(self):
+        # test array[slice, slice] += scalar
+        m = self.m.copy()
+        m[1::2, 1::2] += 11
+
+        md = self.m.todense()
+        md[1::2, 1::2] += 11
+        assert_equal(m.todense(), md)
+
+    def test_wrong_shape(self):
+        m = self.m.copy()
+        with assert_raises(ValueError):
+            m[1::2, 1::2] = m
+
+    def test_mixed_dtype_assign(self):
+        # XXX assignments w/ mixed dtypes silently cast (truncate etc)
+        m = self.m.copy()
+        f = 3 * m[1::2, 1::2].astype(float)
+
+        m[1::2, 1::2] = f
+
+        dense = self.m.todense()
+        dense[1::2, 1::2] = f.todense()
+
+        assert_allclose(m.todense(), dense, atol=1e-15)
