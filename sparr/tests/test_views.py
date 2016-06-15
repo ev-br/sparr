@@ -11,7 +11,7 @@ from numpy.testing.decorators import skipif, knownfailureif as knf
 from .. import MapArray
 
 from .test_slices import SLICES
-from .test_basic import ArithmeticsMixin
+from .test_basic import ArithmeticsMixin, CmpMixin
 
 
 def test_view_stub():
@@ -122,24 +122,87 @@ def test_two_ellipsis():
 
 
 
-#### Test arithmetic operations with views
+############### Test arithmetic operations with views   ###################
 
-#class ArithmViewsMixin(ArithmeticsMixin):
-#    def setUp(self):
-#        rndm = np.random.RandomState(1234)
-#        arr = rndm.random_sample(size=(2, 4)) * 10
-#        arr = arr.astype(self.dtype)
-#        ma = MapArray.from_dense(arr)
-#        ma[2, 4] = 1
-#        self.ma = ma[::2, ::-1]
+class ArithmViewsMixin(ArithmeticsMixin):
+    def setUp(self):
+        rndm = np.random.RandomState(1234)
+        arr = rndm.random_sample(size=(2, 4)) * 10
+        arr = arr.astype(self.dtype)
+        ma = MapArray.from_dense(arr)
+        ma[2, 4] = 1
+        self.ma = ma[::2, ::-1]
 
-#        arr1 = rndm.random_sample(size=(3, 5)) * 10
-#        arr1 = arr1.astype(self.dtype)
-#        rhs = MapArray.from_dense(arr1)
-#        rhs.fill_value = 8
-#        self.rhs = rhs[::2, ::-1]
+        arr1 = rndm.random_sample(size=(3, 5)) * 10
+        arr1 = arr1.astype(self.dtype)
+        rhs = MapArray.from_dense(arr1)
+        rhs.fill_value = 8
+        self.rhs = rhs[::2, ::-1]
+
+    @knf(True, "view shape update bug.")
+    def test_inplace_iop_wrong_shape(self):
+        # incompatible shapes should raise ValueErrors
+        super(ArithmViewsMixin, self).test_inplace_iop_wrong_shape()
+
+    @knf(True, "view shape update bug.")
+    def test_sparse_op_sparse_wrong_shape(self):
+        super(ArithmViewsMixin, self).test_sparse_op_sparse_wrong_shape()
 
 
-#class TestArithmViews(ArithmViewsMixin, TestCase):
-#    dtype = float
+class TestArithmViews(ArithmViewsMixin, TestCase):
+    dtype = float
+
+
+####### Test array[slices][slices]
+class ArithmViewsMixin2(ArithmeticsMixin):
+    def setUp(self):
+        rndm = np.random.RandomState(1234)
+        arr = rndm.random_sample(size=(2, 4)) * 10
+        arr = arr.astype(self.dtype)
+        ma = MapArray.from_dense(arr)
+        ma[2, 4] = 1
+        maa = ma[::2, ::-1]
+        self.ma = maa[:, ::2]
+
+        arr1 = rndm.random_sample(size=(3, 5)) * 10
+        arr1 = arr1.astype(self.dtype)
+        rhs = MapArray.from_dense(arr1)
+        rhs.fill_value = 8
+        rhss = rhs[::2, ::-1]
+        self.rhs = rhss[:, ::2]
+
+    @knf(True, "view shape update bug.")
+    def test_inplace_iop_wrong_shape(self):
+        # incompatible shapes should raise ValueErrors
+        super(ArithmViewsMixin2, self).test_inplace_iop_wrong_shape()
+
+    @knf(True, "view shape update bug.")
+    def test_sparse_op_sparse_wrong_shape(self):
+        super(ArithmViewsMixin2, self).test_sparse_op_sparse_wrong_shape()
+
+
+class TestArithmViews2(ArithmViewsMixin2, TestCase):
+    dtype = int
+
+
+####################### Comparisons
+class CmpViewsMixin(CmpMixin):
+
+    def setUp(self):
+        rndm = np.random.RandomState(1234)
+        arr = rndm.random_sample(size=(3, 5)) * 10
+        arr = arr.astype(self.ldtype)
+        lhs = MapArray.from_dense(arr)
+        self.lhs = lhs[::2, 1::2]
+
+        arr1 = rndm.random_sample(size=(3, 5)) * 10 + 5
+        arr1 = arr1.astype(self.rdtype)
+        rhs = MapArray.from_dense(arr1)
+        self.rhs = rhs[::2, 1::2]
+        self.rhs.fill_value = -5
+
+
+class TestCmpViews(CmpViewsMixin):
+    ldtype = float
+    rdtype = int
 
