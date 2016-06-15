@@ -370,6 +370,15 @@ struct view_view_t : public abstract_view_t<T, I>
         assert(base_view->ndim() == (int)slices.size());
     }
 
+    view_view_t(Array *base,
+                const std::vector<slice_t>& slices)
+        : abstract_view_t<T, I>(base, slices)
+    {
+        if (!base)
+            throw std::runtime_error("view: base cannot be NULL");
+        assert(base->ndim() == (int)slices.size());
+    }
+
     int ndim() const {
         assert(this->m_base);
         return this->m_base->ndim();

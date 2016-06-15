@@ -130,7 +130,7 @@ cdef class View:
         Returns
         -------
         A View wrapper over a map_view_t object, viewing onto the data held
-        by `holder`. This is an identical view, which view the full data.
+        by `holder`. This is an identical view, which views the full data.
 
         """
         self = View()
@@ -188,6 +188,50 @@ cdef class View:
             dtype = np.dtype(cnp.PyArray_TypeObjectFromType(self.typenum))
             raise TypeError("dtype %s  not supported." % dtype)
         return self
+
+    @staticmethod
+    def from_view_and_data(int typenum, Holder holder not None, View view not None):
+        """Construct a new view onto the `holder`'s data using `view`'s converter
+
+        Parameters
+        ----------
+        typenum : int
+            numpy-style type number
+        holder : Holder
+            the base data
+        view : View
+            a base view
+
+        Returns
+        -------
+        A View wrapper over a view_view_t object, viewing into the `holder`'s data
+        with the `view`'s converter.
+
+        """
+        self = View()
+        self.typenum = typenum
+        assert typenum == holder.typenum
+
+        # figure out the view's typenum and extract the slice vector
+        cdef vector[slice_t] sl
+        {{for num, ct, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} {{num}} == view.typenum:
+            sl = view.p.{{ct}}_ptr.get_slices()
+        {{endfor}}
+
+        # allocate the new view
+        {{for num, ct, IF in zip(TNUMS, CTYPES, CONDS)}}
+        {{IF}} {{num}} == typenum:
+            if sl.empty():
+                self.p.{{ct}}_ptr = new map_view_t[{{ct}}, npy_intp](holder.p.{{ct}}_ptr)
+            else:
+                self.p.{{ct}}_ptr = new view_view_t[{{ct}}, npy_intp](holder.p.{{ct}}_ptr, sl)
+        {{endfor}}
+        else:
+            dtype = np.dtype(cnp.PyArray_TypeObjectFromType(self.typenum))
+            raise TypeError("dtype %s  not supported." % dtype)
+        return self
+
 
     def __dealloc__(self):
         {{for num, ct, IF in zip(TNUMS, CTYPES, CONDS)}}
@@ -446,6 +490,7 @@ cdef class MapArray:
             {{for num1, ct1, IF1 in zip(TNUMS, CTYPES, CONDS)}}
             {{IF1}} typenum_dest == {{num1}}:
                 newobj.holder.p.{{ct1}}_ptr.copy_from[{{ct}}, npy_intp](self.holder.p.{{ct}}_ptr)
+                newobj.view = View.from_view_and_data({{num1}}, newobj.holder, self.view)
                 return newobj
             {{endfor}}
         {{endfor}}

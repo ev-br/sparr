@@ -40,6 +40,8 @@ cdef extern from "views.h" namespace "sparray":
 
 
     cdef cppclass view_view_t[T, I](abstract_view_t[T, I]):
+        view_view_t(map_array_t[T, I] *base,
+                    const vector[slice_t]& slices)
         view_view_t(abstract_view_t[T, I] *base_view,
                     const vector[slice_t]& slices)
 

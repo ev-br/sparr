@@ -11,6 +11,7 @@ from numpy.testing.decorators import skipif, knownfailureif as knf
 from .. import MapArray
 
 from .test_slices import SLICES
+from .test_basic import ArithmeticsMixin
 
 
 def test_view_stub():
@@ -70,6 +71,21 @@ def test_copy():
     mmm = mm.copy()
     assert_(mmm.base is None)
 
+
+def test_copy_shape():
+    # check that view.copy() == view, not view.base 
+    arr = np.arange(18).reshape((3, 6))
+    m = MapArray.from_dense(arr)
+    v = m[:-1, ::2]
+    c = v.copy()
+    assert_equal(v.shape, c.shape)
+    assert_allclose(v.todense(), c.todense(), atol=1e-15)
+
+    cc = v.astype(int)
+    assert_equal(v.shape, cc.shape)
+    assert_allclose(v.todense(), cc.todense(), atol=1e-15)
+
+
 def test_getitem_slices():
     m = MapArray()
     m[0, 0] = 8
@@ -94,9 +110,6 @@ def check_slicing(m, s1, s2):
     assert_(m.base is None)
 
     mmm = mm[::2, :]
-
-    import pdb; pdb.set_trace()
-
     assert_allclose(mmm.todense(), m.todense()[s1, s2][::2, :], atol=1e-15)
     assert_(mmm.base is mm)
 
@@ -106,3 +119,27 @@ def test_two_ellipsis():
     a = MapArray(shape=(2, 3, 4))
     with assert_raises(IndexError):
         a[..., 1, ...]
+
+
+
+#### Test arithmetic operations with views
+
+#class ArithmViewsMixin(ArithmeticsMixin):
+#    def setUp(self):
+#        rndm = np.random.RandomState(1234)
+#        arr = rndm.random_sample(size=(2, 4)) * 10
+#        arr = arr.astype(self.dtype)
+#        ma = MapArray.from_dense(arr)
+#        ma[2, 4] = 1
+#        self.ma = ma[::2, ::-1]
+
+#        arr1 = rndm.random_sample(size=(3, 5)) * 10
+#        arr1 = arr1.astype(self.dtype)
+#        rhs = MapArray.from_dense(arr1)
+#        rhs.fill_value = 8
+#        self.rhs = rhs[::2, ::-1]
+
+
+#class TestArithmViews(ArithmViewsMixin, TestCase):
+#    dtype = float
+
