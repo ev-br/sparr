@@ -889,32 +889,38 @@ def _richcmp_impl(MapArray self not None, MapArray other not None, int op):
             apply_binop[{{ct}}, npy_bool, npy_intp](less[{{ct}}],
                                           result.view.p.npy_bool_ptr,
                                           self.view.p.{{ct}}_ptr,
-                                          other.view.p.{{ct}}_ptr)
+                                          other.view.p.{{ct}}_ptr,
+                                          result._base is None)
         elif op == 1:
             apply_binop[{{ct}}, npy_bool, npy_intp](less_equal[{{ct}}],
                                           result.view.p.npy_bool_ptr,
                                           self.view.p.{{ct}}_ptr,
-                                          other.view.p.{{ct}}_ptr)
+                                          other.view.p.{{ct}}_ptr,
+                                          result._base is None)
         elif op == 2:
             apply_binop[{{ct}}, npy_bool, npy_intp](equal[{{ct}}],
                                           result.view.p.npy_bool_ptr,
                                           self.view.p.{{ct}}_ptr,
-                                          other.view.p.{{ct}}_ptr)
+                                          other.view.p.{{ct}}_ptr,
+                                          result._base is None)
         elif op == 3:
             apply_binop[{{ct}}, npy_bool, npy_intp](not_equal[{{ct}}],
                                           result.view.p.npy_bool_ptr,
                                           self.view.p.{{ct}}_ptr,
-                                          other.view.p.{{ct}}_ptr)
+                                          other.view.p.{{ct}}_ptr,
+                                          result._base is None)
         elif op == 4:
             apply_binop[{{ct}}, npy_bool, npy_intp](greater[{{ct}}],
                                           result.view.p.npy_bool_ptr,
                                           self.view.p.{{ct}}_ptr,
-                                          other.view.p.{{ct}}_ptr)
+                                          other.view.p.{{ct}}_ptr,
+                                          result._base is None)
         elif op == 5:
             apply_binop[{{ct}}, npy_bool, npy_intp](greater_equal[{{ct}}],
                                           result.view.p.npy_bool_ptr,
                                           self.view.p.{{ct}}_ptr,
-                                          other.view.p.{{ct}}_ptr)
+                                          other.view.p.{{ct}}_ptr,
+                                          result._base is None)
         else:
             raise ValueError("sparse cmp: op = ." % op)
         return result

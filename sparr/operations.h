@@ -166,6 +166,7 @@ inplace_binop(T (*binop)(T x, T y),
     }
 
     // finally, update the fill_value
+    assert(cond);
     self->set_fill_value(new_fill_value);
 
 }
@@ -179,7 +180,8 @@ inline void
 apply_binop(T (*binop)(S x, S y),
             abstract_view_t<T, I> *self,
             const abstract_view_t<S, I> *arg1,
-            const abstract_view_t<S, I> *arg2)
+            const abstract_view_t<S, I> *arg2,
+            int can_mutate_fill_value)
 {
     typedef abstract_view_t<T, I> ArrayT;
     typedef abstract_view_t<S, I> ArrayS;
@@ -198,6 +200,17 @@ apply_binop(T (*binop)(S x, S y),
             throw std::invalid_argument("Binop: incompatible dimensions.");
         }
     }
+
+    // fill_value
+    T new_fill_value = (*binop)(arg1->fill_value(), arg2->fill_value());
+
+    bool cond = can_mutate_fill_value || (new_fill_value == self->fill_value());
+    if (!cond) {
+        // updating the fill_value is prohibited by the caller;
+        // the operation tries to change it; bail out (XXX: densify instead?)
+        throw std::invalid_argument("Changing the fill_value is not allowed.");
+    }
+
 
     // result shape is known, set it right away
     self->set_shape(arg1->shape());
@@ -239,9 +252,9 @@ apply_binop(T (*binop)(S x, S y),
         }
     }
 
-    // update fill_value
-    T fill_value = (*binop)(arg1->fill_value(), arg2->fill_value());
-    self->set_fill_value(fill_value);
+    // finally, update fill_value
+    assert(cond);
+    self->set_fill_value(new_fill_value);
 }
 
 

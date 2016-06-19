@@ -72,7 +72,8 @@ cdef extern from "operations.h" namespace "sparray":
     void apply_binop[S, T, I](T (*binop)(S x, S y),
                               abstract_view_t[T, I] *self,
                               const abstract_view_t[S, I] *arg1,
-                              const abstract_view_t[S, I] *arg2) except +
+                              const abstract_view_t[S, I] *arg2,
+                              int can_mutate_fill_value) except +
 
     void apply_mmul[T, I](abstract_view_t[T, I] *C,
                           const abstract_view_t[T, I]* A,
