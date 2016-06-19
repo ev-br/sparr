@@ -78,3 +78,10 @@ cdef extern from "operations.h" namespace "sparray":
     void apply_mmul[T, I](abstract_view_t[T, I] *C,
                           const abstract_view_t[T, I]* A,
                           const abstract_view_t[T, I]* B) except +
+
+
+cdef extern from "richcmp.h" namespace "sparray":
+    void rich_compare[S, T, I](abstract_view_t[T, I] *trg,
+                            const abstract_view_t[S, I] *lhs,
+                            const abstract_view_t[S, I] *rhs,
+                            int opid) except +

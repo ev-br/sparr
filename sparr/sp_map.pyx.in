@@ -21,7 +21,7 @@ from libcpp.vector cimport vector
 
 from sparr.fixed_cap cimport index_type, index_factory_t, FC_ELEMS
 from sparr.views cimport (map_array_t, abstract_view_t, map_view_t, view_view_t,
-                          todense, to_coo, inplace_binop, apply_binop, apply_mmul)
+                          todense, to_coo, inplace_binop, apply_mmul, rich_compare)
 from sparr.slices cimport slice_t, slices_from_pyslices, slices_from_pyslices2
 
 cdef extern from "complex_ops.h":
@@ -35,13 +35,6 @@ cdef extern from "elementwise_ops.h" namespace "sparray":
     T mul[T](T, T)
     T sub[T](T, T)
     T assign[T](T, T)
-
-    npy_bool equal[S](S, S)
-    npy_bool less_equal[S](S, S)
-    npy_bool greater_equal[S](S, S)
-    npy_bool not_equal[S](S, S)
-    npy_bool less[S](S, S)
-    npy_bool greater[S](S, S)
 
 
 cdef extern from "util.h" namespace "sparray":
@@ -881,50 +874,14 @@ def _richcmp_impl(MapArray self not None, MapArray other not None, int op):
     # by now, both self and other are of the same dtype
     result = MapArray(dtype=bool, ndim=self.ndim)
 
-    # TODO: shove the switch on `op` into an enum, like PyObject_RichCompare does
     # dispatch on the types
     {{for num, ct in zip(TNUMS, CTYPES)}}
     if self.typenum == {{num}}:
-        if op == 0:
-            apply_binop[{{ct}}, npy_bool, npy_intp](less[{{ct}}],
-                                          result.view.p.npy_bool_ptr,
-                                          self.view.p.{{ct}}_ptr,
-                                          other.view.p.{{ct}}_ptr,
-                                          result._base is None)
-        elif op == 1:
-            apply_binop[{{ct}}, npy_bool, npy_intp](less_equal[{{ct}}],
-                                          result.view.p.npy_bool_ptr,
-                                          self.view.p.{{ct}}_ptr,
-                                          other.view.p.{{ct}}_ptr,
-                                          result._base is None)
-        elif op == 2:
-            apply_binop[{{ct}}, npy_bool, npy_intp](equal[{{ct}}],
-                                          result.view.p.npy_bool_ptr,
-                                          self.view.p.{{ct}}_ptr,
-                                          other.view.p.{{ct}}_ptr,
-                                          result._base is None)
-        elif op == 3:
-            apply_binop[{{ct}}, npy_bool, npy_intp](not_equal[{{ct}}],
-                                          result.view.p.npy_bool_ptr,
-                                          self.view.p.{{ct}}_ptr,
-                                          other.view.p.{{ct}}_ptr,
-                                          result._base is None)
-        elif op == 4:
-            apply_binop[{{ct}}, npy_bool, npy_intp](greater[{{ct}}],
-                                          result.view.p.npy_bool_ptr,
-                                          self.view.p.{{ct}}_ptr,
-                                          other.view.p.{{ct}}_ptr,
-                                          result._base is None)
-        elif op == 5:
-            apply_binop[{{ct}}, npy_bool, npy_intp](greater_equal[{{ct}}],
-                                          result.view.p.npy_bool_ptr,
-                                          self.view.p.{{ct}}_ptr,
-                                          other.view.p.{{ct}}_ptr,
-                                          result._base is None)
-        else:
-            raise ValueError("sparse cmp: op = ." % op)
+        rich_compare[{{ct}}, npy_bool, npy_intp](result.view.p.npy_bool_ptr,
+                                                 self.view.p.{{ct}}_ptr,
+                                                 other.view.p.{{ct}}_ptr,
+                                                 op)
         return result
-
     {{endfor}}
 
 
