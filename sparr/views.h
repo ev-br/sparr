@@ -146,11 +146,14 @@ class slice_iterator
         }
 
         void satisfy_predicate() {
-            while (this->base() != this->m_end &&
-                   !this->m_conv.v_from_m(this->base()->first).first)
+            while (this->base() != this->m_end && !is_in_slice(this->base()))
             {
                 ++(this->base_reference());
             }
+        }
+
+        bool is_in_slice(Iterator base_iter) {
+            return this->m_conv.v_from_m(base_iter->first).first;
         }
 
         void decrement() {
